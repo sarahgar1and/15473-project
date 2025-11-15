@@ -1,0 +1,15 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run Renderer",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/3D-app",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "MIMode": "lldb",
+            "preLaunchTask": "build"
+        }
+    ]
+}
