@@ -5,7 +5,8 @@
             "includePath": [
                 "${workspaceFolder}/**",
                 "/opt/homebrew/opt/sfml/include",
-                "/opt/homebrew/Cellar/glew/2.2.0_1/include"
+                "/opt/homebrew/opt/glew/include",
+                "/opt/homebrew/opt/glm/include"
             ],
             "defines": [],
             "macFrameworkPath": [

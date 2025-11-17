@@ -5,7 +5,7 @@
             "name": "Run Renderer",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/3D-app",
+            "program": "${workspaceFolder}/3D-OpenGL",
             "args": [],
             "cwd": "${workspaceFolder}",
             "MIMode": "lldb",

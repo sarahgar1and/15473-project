@@ -1,16 +1,27 @@
 #include <SFML/Graphics.hpp>
+#include <SFML/Window.hpp>
 #include <GL/glew.h>
 #include <iostream>
+
+#include "Mesh.h"
+#include "Shader.h"
+#include "Camera.h"
+
+const float speed = 6.0f;
+const float mouseSensitivity = 25.0f;
 
 int main(){
 
     const char* vertexShaderCode = "#version 330 core\n"
         "layout (location = 0) in vec3 pos;\n"
-        "void main(){ gl_Position = vec4(pos, 1.0); }\n";
+        "uniform mat4 projection;\n"
+        "uniform mat4 view;\n"
+        "void main(){ gl_Position = projection * view * vec4(pos, 1.0); }\n";
     
     const char* fragmentShaderCode = "#version 330 core\n"
         "out vec4 FragColor;\n"
-        "void main(){ FragColor = vec4(1.0, 1.0, 0.0, 1.0); } \n";
+        "uniform vec3 color;\n"
+        "void main(){ FragColor = vec4(color, 1.0); } \n";
 
     // Request OpenGL 3.3 Core Profile
     sf::ContextSettings settings;
@@ -20,86 +31,78 @@ int main(){
 
     sf::Window window(sf::VideoMode({800,800}), "3D OpenGL", sf::Style::Default, sf::State::Windowed, settings);
 
-    // glewExperimental = GL_TRUE;
     if (glewInit() != GLEW_OK){
         std::cerr << "Failed to initialize GLEW\n";
         return -1;
     }
 
-    int success{};
-    char infoLog[1024]{};
+    Shader shader(vertexShaderCode, fragmentShaderCode);
 
-    size_t vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderCode, nullptr);
-    glCompileShader(vertexShader);
+    Mesh mesh({
+        glm::vec3(0.8f, 0.8f, 0.0f), // top right
+        glm::vec3(0.8f, -0.8f, 0.0f), // bottom right
+        glm::vec3(-0.8f, -0.8f, 0.0f), // bottom left
+        glm::vec3(-0.8f, 0.8f, 0.0f) // top left
+    }, {0, 1, 3, 1, 2, 3});
 
-    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
+    Camera camera(glm::vec3(0.0f, 0.0f, 2.0f));
 
-    if (!success){
-        glGetShaderInfoLog(vertexShader, 1024, nullptr, infoLog);
-        std::cerr << "Failed to complie vertex shader!\nInfolog:\n" << infoLog;
-    }
+    bool isFirstMouse = true;
+    sf::Vector2i lastMousePos{};
 
-    size_t fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderCode, nullptr);
-    glCompileShader(fragmentShader);
+    sf::Clock clock{};
+    while (window.isOpen()){
+        float deltaTime = clock.restart().asSeconds();
 
-    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-
-    if (!success){
-        glGetShaderInfoLog(fragmentShader, 1024, nullptr, infoLog);
-        std::cerr << "Failed to complie fragment shader!\nInfolog:\n" << infoLog;
-    }
-
-    size_t shader = glCreateProgram();
-    glAttachShader(shader, vertexShader);
-    glAttachShader(shader, fragmentShader);
-    glLinkProgram(shader);
-
-    glGetProgramiv(shader, GL_LINK_STATUS, &success);
-
-    if (!success){
-        glGetProgramInfoLog(shader, 1024, nullptr, infoLog);
-        std::cerr << "Failed to link shader!\nInfolog:\n" << infoLog;
-    }
-
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
-
-    float vertices[] = {
-        1.0f, -1.0f, 0.0f,
-        -1.0f, -1.0f, 0.0f,
-        0.0f, 1.0f, 0.0f
-    };
-
-    unsigned int vao{}, vbo{};
-    glGenBuffers(1, &vbo);
-    glGenVertexArrays(1, &vao);
-
-    glBindVertexArray(vao);
-
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), nullptr);
-    glEnableVertexAttribArray(0);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-
-    while(window.isOpen()){
         while (const std::optional event = window.pollEvent()){
             if (event->is<sf::Event::Closed>())
                 window.close();
+            else if (event->is<sf::Event::Resized>()){
+                glViewport(0, 0, window.getSize().x, window.getSize().y);
+            }
         }
+        // Camera Movement
+        camera.UpdateDirectionVectors();
+
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W))
+            camera.position += camera.Forward() * speed * deltaTime;
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S))
+            camera.position -= camera.Forward() * speed * deltaTime;
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A))
+            camera.position -= camera.Right() * speed * deltaTime;
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D))
+            camera.position += camera.Right() * speed * deltaTime; 
+
+        if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Right)){
+            if (isFirstMouse){
+                lastMousePos = sf::Mouse::getPosition(window);
+                isFirstMouse = false;
+                window.setMouseCursorVisible(false);
+            } else {
+                sf::Vector2i mousePos = sf::Mouse::getPosition(window);
+                int xOffset = mousePos.x - lastMousePos.x;
+                int yOffset = lastMousePos.y - mousePos.y;
+
+                camera.yaw += xOffset * mouseSensitivity * deltaTime;
+                camera.pitch += yOffset * mouseSensitivity * deltaTime;
+
+                sf::Mouse::setPosition(lastMousePos, window);
+            }
+        } else {
+            isFirstMouse = true;
+            window.setMouseCursorVisible(true);
+        }
+
+        // Rendering
         glClear(GL_COLOR_BUFFER_BIT);
 
-        glUseProgram(shader);
+        shader.Use();
+        shader.SetValue("view", camera.GetViewMatrix());
+        shader.SetValue("projection", camera.GetProjectionMatrix(window.getSize().x, window.getSize().y));
 
-        glBindVertexArray(vao);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        shader.SetValue("color", glm::vec3(1.0f, 0.5f, 0.5f));
+        mesh.Draw();
 
-         window.display();
-
+        window.display();
     }
 }

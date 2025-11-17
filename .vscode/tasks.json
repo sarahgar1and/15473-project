@@ -7,14 +7,16 @@
             "command": "/usr/bin/clang++",
             "args": [
                 "-std=c++17",
-                "3DRenderer.cpp",
-                "-o", "3D-app",
+                "${workspaceFolder}/**/*.cpp",
+                "-o", "3D-OpenGL",
 
                 "-I/opt/homebrew/opt/sfml/include",
                 "-L/opt/homebrew/opt/sfml/lib",
 
                 "-I/opt/homebrew/opt/glew/include",
                 "-L/opt/homebrew/opt/glew/lib",
+
+                "-I/opt/homebrew/opt/glm/include",
 
                 "-lsfml-graphics",
                 "-lsfml-window",
