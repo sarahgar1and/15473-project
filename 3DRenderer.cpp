@@ -2,28 +2,21 @@
 #include <SFML/Window.hpp>
 #include <GL/glew.h>
 #include <iostream>
+#include <fstream>
+#include <sstream>
 
 #include "Mesh.h"
 #include "Shader.h"
 #include "Camera.h"
 #include "Object.h"
+#include "Model.h"
 
 // const float speed = 6.0f;
 // const float mouseSensitivity = 25.0f;
 
-int main(){
+std::string ReadTextFile(const std::string& fileName);
 
-    const char* vertexShaderCode = "#version 330 core\n"
-        "layout (location = 0) in vec3 pos;\n"
-        "uniform mat4 projection;\n"
-        "uniform mat4 view;\n"
-        "uniform mat4 model;\n"
-        "void main(){ gl_Position = projection * view * model * vec4(pos, 1.0); }\n";
-    
-    const char* fragmentShaderCode = "#version 330 core\n"
-        "out vec4 FragColor;\n"
-        "uniform vec3 color;\n"
-        "void main(){ FragColor = vec4(color, 1.0); } \n";
+int main(){
 
     // Request OpenGL 3.3 Core Profile
     sf::ContextSettings settings;
@@ -38,7 +31,7 @@ int main(){
         return -1;
     }
 
-    Shader shader(vertexShaderCode, fragmentShaderCode);
+    Shader shader(ReadTextFile("vertex.glsl"), ReadTextFile("fragment.glsl"));
 
     Mesh mesh({
         glm::vec3(0.8f, 0.8f, 0.0f), // top right
@@ -47,8 +40,10 @@ int main(){
         glm::vec3(-0.8f, 0.8f, 0.0f) // top left
     }, {0, 1, 3, 1, 2, 3});
 
+    Model model("");
+
     Camera camera(glm::vec3(0.0f, 0.0f, 2.0f));
-    Object object(&mesh, glm::vec3(-1.0f, 0.0f, 0.0f), glm::vec3(45.0f, 45.0f, 45.0f));
+    Object object(&model, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(45.0f, 45.0f, 45.0f));
 
     // bool isFirstMouse = true;
     // sf::Vector2i lastMousePos{};
@@ -107,4 +102,14 @@ int main(){
 
         window.display();
     }
+}
+
+std::string ReadTextFile(const std::string& fileName){
+    std::ifstream file(fileName);
+
+    std::stringstream ss{};
+    ss << file.rdbuf();
+    file.close();
+
+    return ss.str();
 }

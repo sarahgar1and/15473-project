@@ -18,12 +18,17 @@
 
                 "-I/opt/homebrew/opt/glm/include",
 
+                "-I/opt/homebrew/opt/assimp/include",
+                "-L/opt/homebrew/opt/assimp/lib",
+
                 "-lsfml-graphics",
                 "-lsfml-window",
                 "-lsfml-system",
 
                 "-lGLEW",
                 "-framework", "OpenGL",
+
+                "-lassimp"
             ],
             "group": {
                 "kind": "build",
