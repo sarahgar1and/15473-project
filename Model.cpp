@@ -15,7 +15,7 @@ Model::Model(const std::string& fileName){
         std::cerr << "Failed to load " << fileName << std::endl;
         return;
     }
-    processNode(scene->mRootNode, glm::mat4(1.0f));
+    processNode(scene->mRootNode, scene, glm::mat4(1.0f));
 }
 
 void Model::Draw(Shader& shader, glm::mat4 transformation) const {
@@ -26,7 +26,7 @@ void Model::Draw(Shader& shader, glm::mat4 transformation) const {
     }
 }
 
-void Model::processNode(aiNode* node, glm::mat4 parentTransformation){
+void Model::processNode(aiNode* node, const aiScene* scene, glm::mat4 parentTransformation){
     glm::mat4 transformation{};
 
     transformation[0][0] = node->mTransformation.a1;  transformation[1][0] = node->mTransformation.a2;
@@ -40,7 +40,37 @@ void Model::processNode(aiNode* node, glm::mat4 parentTransformation){
 
     transformation = parentTransformation * transformation;
 
-    for (size_t i = 0; i < node->mNumChildren; i++){
-        processNode(node->mChildren[i], transformation);
+    for (size_t i = 0; i < node->mNumMeshes; i++){
+        Mesh mesh = processMesh(scene->mMeshes[node->mMeshes[i]]);
+        mesh.transformation = transformation;
+        meshes.push_back(mesh);
     }
+
+    for (size_t i = 0; i < node->mNumChildren; i++){
+        processNode(node->mChildren[i], scene, transformation);
+    }
+}
+
+Mesh Model::processMesh(aiMesh* mesh){
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
+
+    for (size_t i = 0; i < mesh->mNumVertices; i++){
+        Vertex vertex{};
+        aiVector3D pos = mesh->mVertices[i];
+        aiVector3D norm = mesh->mNormals[i];
+        vertex.position = glm::vec3(pos.x, pos.y, pos.z);
+        vertex.normal = glm::vec3(norm.x, norm.y, norm.z);;
+
+        vertices.push_back(vertex);
+    }
+
+    for (size_t i = 0; i < mesh->mNumFaces; i++){
+        aiFace face = mesh->mFaces[i];
+        for (size_t i = 0; i < face.mNumIndices; i++){
+            indices.push_back(face.mIndices[i]);
+        }
+    }
+
+    return Mesh(vertices, indices);
 }

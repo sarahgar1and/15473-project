@@ -12,7 +12,8 @@ public:
     void Draw(Shader& shader, glm::mat4 transformation) const; 
 
 private:
-    void processNode(aiNode* node, glm::mat4 parentTransformation);
+    void processNode(aiNode* node, const aiScene* scene , glm::mat4 parentTransformation);
+    Mesh processMesh(aiMesh* mesh);
 
     std::vector<Mesh> meshes;
 };

@@ -22,6 +22,7 @@ int main(){
     sf::ContextSettings settings;
     settings.majorVersion = 3;
     settings.minorVersion = 3;
+    settings.depthBits = 24;
     settings.attributeFlags = sf::ContextSettings::Core;
 
     sf::Window window(sf::VideoMode({800,800}), "3D OpenGL", sf::Style::Default, sf::State::Windowed, settings);
@@ -31,19 +32,17 @@ int main(){
         return -1;
     }
 
+    glEnable(GL_DEPTH_TEST);
+
     Shader shader(ReadTextFile("vertex.glsl"), ReadTextFile("fragment.glsl"));
+    Model model("scene.fbx");
 
-    Mesh mesh({
-        glm::vec3(0.8f, 0.8f, 0.0f), // top right
-        glm::vec3(0.8f, -0.8f, 0.0f), // bottom right
-        glm::vec3(-0.8f, -0.8f, 0.0f), // bottom left
-        glm::vec3(-0.8f, 0.8f, 0.0f) // top left
-    }, {0, 1, 3, 1, 2, 3});
+    Camera camera(glm::vec3(0.0f, 0.0f, 10.0f));
+    Object object(&model);
 
-    Model model("");
-
-    Camera camera(glm::vec3(0.0f, 0.0f, 2.0f));
-    Object object(&model, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(45.0f, 45.0f, 45.0f));
+    shader.Use();
+    shader.SetValue("lightColor", glm::vec3(1.0f));
+    shader.SetValue("ambientStrength", 0.1f);
 
     // bool isFirstMouse = true;
     // sf::Vector2i lastMousePos{};
@@ -92,11 +91,13 @@ int main(){
         // }
 
         // Rendering
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         shader.Use();
         shader.SetValue("view", camera.GetViewMatrix());
         shader.SetValue("projection", camera.GetProjectionMatrix((float)window.getSize().x, (float)window.getSize().y));
+        shader.SetValue("lightPos", camera.position);
+        shader.SetValue("viewPos", camera.position);
 
         object.Draw(shader, glm::vec3(1.0f, 0.5f, 0.5f));
 

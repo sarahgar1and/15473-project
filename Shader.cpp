@@ -60,3 +60,7 @@ void Shader::SetValue(const std::string& name, glm::vec3 value){
 void Shader::SetValue(const std::string& name, glm::mat4 value){
     glUniformMatrix4fv(glGetUniformLocation(programID, name.c_str()), 1, GL_FALSE, glm::value_ptr(value));
 }
+
+void Shader::SetValue(const std::string& name, float value){
+    glUniform1f(glGetUniformLocation(programID, name.c_str()), value);
+}
