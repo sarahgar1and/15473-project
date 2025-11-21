@@ -12,10 +12,10 @@ struct Material{
     float shininess;
 };
 
-class Model{
+class Scene{
 public:
-    Model(const std::string& fileName);
-    void Draw(Shader& shader, glm::mat4 transformation) const; 
+    Scene(const std::string& fileName);
+    void Draw(Shader& shader) const; 
 
 private:
     void processNode(aiNode* node, const aiScene* scene , glm::mat4 parentTransformation);

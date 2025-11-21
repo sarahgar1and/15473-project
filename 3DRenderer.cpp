@@ -8,15 +8,14 @@
 #include "Mesh.h"
 #include "Shader.h"
 #include "Camera.h"
-#include "Object.h"
-#include "Model.h"
+#include "Scene.h"
 
 // const float speed = 6.0f;
 // const float mouseSensitivity = 25.0f;
 
 std::string ReadTextFile(const std::string& fileName);
 
-int main(){
+int main(int argc, char** argv){
 
     // Request OpenGL 3.3 Core Profile
     sf::ContextSettings settings;
@@ -34,12 +33,13 @@ int main(){
 
     glEnable(GL_DEPTH_TEST);
 
+    std::string fileName = "scene.fbx";
+    if (argc > 1) fileName = argv[1]; 
+
     Shader shader(ReadTextFile("vertex.glsl"), ReadTextFile("fragment.glsl"));
-    // Model model("scene.fbx");
-    Model model("mesh_fracturing.fbx");
+    Scene scene(fileName);
 
     Camera camera(glm::vec3(0.0f, 0.0f, 10.0f));
-    Object object(&model);
 
     shader.Use();
     shader.SetValue("lightColor", glm::vec3(1.0f));
@@ -100,7 +100,7 @@ int main(){
         shader.SetValue("lightPos", camera.position);
         shader.SetValue("viewPos", camera.position);
 
-        object.Draw(shader);
+        scene.Draw(shader);
 
         window.display();
     }
