@@ -35,7 +35,8 @@ int main(){
     glEnable(GL_DEPTH_TEST);
 
     Shader shader(ReadTextFile("vertex.glsl"), ReadTextFile("fragment.glsl"));
-    Model model("scene.fbx");
+    // Model model("scene.fbx");
+    Model model("mesh_fracturing.fbx");
 
     Camera camera(glm::vec3(0.0f, 0.0f, 10.0f));
     Object object(&model);
@@ -99,7 +100,7 @@ int main(){
         shader.SetValue("lightPos", camera.position);
         shader.SetValue("viewPos", camera.position);
 
-        object.Draw(shader, glm::vec3(1.0f, 0.5f, 0.5f));
+        object.Draw(shader);
 
         window.display();
     }

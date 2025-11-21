@@ -16,12 +16,21 @@ Model::Model(const std::string& fileName){
         return;
     }
     processNode(scene->mRootNode, scene, glm::mat4(1.0f));
+
+    for (size_t i = 0; i < scene->mNumMaterials; i++){
+        materials.push_back(processMaterials(scene->mMaterials[i]));
+    }
 }
 
 void Model::Draw(Shader& shader, glm::mat4 transformation) const {
     for (const auto& mesh : meshes){
+        const Material& material = materials[mesh.materialIndex];
+
         shader.Use();
         shader.SetValue("model", mesh.transformation * transformation);
+        shader.SetValue("material.diffuse", material.diffuse);
+        shader.SetValue("material.specular", material.specular);
+        shader.SetValue("material.shininess", material.shininess);
         mesh.Draw();
     }
 }
@@ -51,6 +60,21 @@ void Model::processNode(aiNode* node, const aiScene* scene, glm::mat4 parentTran
     }
 }
 
+Material Model::processMaterials(aiMaterial* mat){
+    Material material{};
+    aiColor3D col;
+
+    mat->Get(AI_MATKEY_COLOR_DIFFUSE, col);
+    material.diffuse = glm::vec3(col.r, col.g, col.b);
+
+    mat->Get(AI_MATKEY_COLOR_SPECULAR, col);
+    material.diffuse = glm::vec3(col.r, col.g, col.b);
+
+    mat->Get(AI_MATKEY_SHININESS, material.shininess);
+
+    return material;
+}
+
 Mesh Model::processMesh(aiMesh* mesh){
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
@@ -72,5 +96,5 @@ Mesh Model::processMesh(aiMesh* mesh){
         }
     }
 
-    return Mesh(vertices, indices);
+    return Mesh(vertices, indices, mesh->mMaterialIndex);
 }

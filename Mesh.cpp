@@ -2,8 +2,8 @@
 
 #include <GL/glew.h>
 
-Mesh::Mesh(std::vector<Vertex> vertices, std::vector<uint32_t> indices)
-    : vertices(vertices), indices(indices), vao(), vbo(), ebo()
+Mesh::Mesh(std::vector<Vertex> vertices, std::vector<uint32_t> indices, size_t materialIndex)
+    : vertices(vertices), indices(indices), vao(), vbo(), ebo(), transformation(), materialIndex(materialIndex)
 {
     glGenBuffers(1, &vbo);
     glGenBuffers(1, &ebo);

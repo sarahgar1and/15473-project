@@ -8,8 +8,7 @@ Object::Object(const Model* model, glm::vec3 position, glm::vec3 rotation, glm::
     
 }
 
-void Object::Draw(Shader& shader, glm::vec3 color){
-    shader.SetValue("color", color);
+void Object::Draw(Shader& shader){
     model->Draw(shader, GetTransformationMatrix());
 }
 
