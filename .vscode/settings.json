@@ -25,6 +25,8 @@
         "typeinfo": "cpp",
         "variant": "cpp",
         "algorithm": "cpp",
-        "sstream": "cpp"
+        "sstream": "cpp",
+        "iostream": "cpp",
+        "unordered_map": "cpp"
     }
 }

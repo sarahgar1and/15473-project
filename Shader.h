@@ -11,6 +11,7 @@ public:
     void SetValue(const std::string& name, glm::vec3 value);
     void SetValue(const std::string& name, glm::mat4 value);
     void SetValue(const std::string& name, float value);
+    void SetValue(const std::string& name, int value);
 
 private:
     uint32_t programID;

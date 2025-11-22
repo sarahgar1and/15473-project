@@ -11,7 +11,7 @@ public:
     // @param yaw Euler Angle, 90deg = forward direction
     // @param pitch Euler Angle
     // @param fov Field of View
-    Camera(glm::vec3 position, float yaw = -90.0f, float pitch = 0.0f, float fov = 60.0f);
+    Camera(glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f), float yaw = -90.0f, float pitch = 0.0f, float fov = 60.0f);
 
     void UpdateDirectionVectors();
     glm::vec3 Forward();

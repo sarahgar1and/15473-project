@@ -5,37 +5,67 @@
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
 
-Scene::Scene(const std::string& fileName){
+Scene::Scene(const std::string& fileName) 
+    : camera(glm::vec3(0.0f, 0.0f, 10.0f)) {
     Assimp::Importer importer;
     importer.ReadFile(fileName, aiProcess_Triangulate);
 
     const aiScene* scene = importer.GetScene();
 
-    if (!scene || !scene->mRootNode || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE){
+    if (!scene || !scene->mRootNode || (scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE)){
         std::cerr << "Failed to load " << fileName << std::endl;
         return;
     }
-    processNode(scene->mRootNode, scene, glm::mat4(1.0f));
+
+    std::unordered_map<std::string, glm::mat4> nodeTransformations;
+    processNode(scene->mRootNode, scene, glm::mat4(1.0f), nodeTransformations);
 
     for (size_t i = 0; i < scene->mNumMaterials; i++){
         materials.push_back(processMaterials(scene->mMaterials[i]));
     }
+
+    // Light list
+    for (size_t i = 0; i < scene->mNumLights; i++){
+        aiLight* light = scene->mLights[i];
+        if (light->mType == aiLightSource_POINT){
+            Light myLight{};
+            aiVector3D pos = light->mPosition;
+            aiColor3D col = light->mColorDiffuse;
+
+            myLight.position = glm::vec3(nodeTransformations[light->mName.data] * glm::vec4(pos.x, pos.y, pos.z, 1.0f));
+            // myLight.color = glm::vec3(col.r, col.g, col.b);
+            myLight.color = glm::vec3(1.0f);
+
+            lights.push_back(myLight);
+        }
+    }
+        
 }
 
 void Scene::Draw(Shader& shader) const {
+    shader.Use();
+    int i = 0;
+    for (const auto& light : lights){
+        shader.SetValue("lights[" + std::to_string(i) + "].position", light.position);
+        shader.SetValue("lights[" + std::to_string(i) + "].color", light.color);
+        i++;
+    }
+    shader.SetValue("numLights", i);
+
     for (const auto& mesh : meshes){
         const Material& material = materials[mesh.materialIndex];
 
-        shader.Use();
         shader.SetValue("model", mesh.transformation);
         shader.SetValue("material.diffuse", material.diffuse);
         shader.SetValue("material.specular", material.specular);
         shader.SetValue("material.shininess", material.shininess);
+
         mesh.Draw();
     }
 }
 
-void Scene::processNode(aiNode* node, const aiScene* scene, glm::mat4 parentTransformation){
+void Scene::processNode(aiNode* node, const aiScene* scene, glm::mat4 parentTransformation,
+    std::unordered_map<std::string, glm::mat4>& nodeTransformations){
     glm::mat4 transformation{};
 
     transformation[0][0] = node->mTransformation.a1;  transformation[1][0] = node->mTransformation.a2;
@@ -48,6 +78,7 @@ void Scene::processNode(aiNode* node, const aiScene* scene, glm::mat4 parentTran
     transformation[2][3] = node->mTransformation.d3;  transformation[3][3] = node->mTransformation.d4;
 
     transformation = parentTransformation * transformation;
+    nodeTransformations[node->mName.data] = transformation;
 
     for (size_t i = 0; i < node->mNumMeshes; i++){
         Mesh mesh = processMesh(scene->mMeshes[node->mMeshes[i]]);
@@ -56,7 +87,7 @@ void Scene::processNode(aiNode* node, const aiScene* scene, glm::mat4 parentTran
     }
 
     for (size_t i = 0; i < node->mNumChildren; i++){
-        processNode(node->mChildren[i], scene, transformation);
+        processNode(node->mChildren[i], scene, transformation, nodeTransformations);
     }
 }
 

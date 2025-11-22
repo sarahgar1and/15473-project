@@ -10,9 +10,6 @@
 #include "Camera.h"
 #include "Scene.h"
 
-// const float speed = 6.0f;
-// const float mouseSensitivity = 25.0f;
-
 std::string ReadTextFile(const std::string& fileName);
 
 int main(int argc, char** argv){
@@ -39,18 +36,18 @@ int main(int argc, char** argv){
     Shader shader(ReadTextFile("vertex.glsl"), ReadTextFile("fragment.glsl"));
     Scene scene(fileName);
 
-    Camera camera(glm::vec3(0.0f, 0.0f, 10.0f));
+    Camera camera = scene.camera;
+    camera.UpdateDirectionVectors();
 
     shader.Use();
-    shader.SetValue("lightColor", glm::vec3(1.0f));
     shader.SetValue("ambientStrength", 0.1f);
+    // shader.SetValue("lights[0].color", glm::vec3(1.0f));
+    shader.SetValue("ambientColor", 1.0f);
+    // shader.SetValue("numLights", 1);
 
-    // bool isFirstMouse = true;
-    // sf::Vector2i lastMousePos{};
-
-    sf::Clock clock{};
+    // sf::Clock clock{};
     while (window.isOpen()){
-        float deltaTime = clock.restart().asSeconds();
+        // float deltaTime = clock.restart().asSeconds();
 
         while (const std::optional event = window.pollEvent()){
             if (event->is<sf::Event::Closed>())
@@ -59,37 +56,6 @@ int main(int argc, char** argv){
                 glViewport(0, 0, window.getSize().x, window.getSize().y);
             }
         }
-        // Camera Movement
-        camera.UpdateDirectionVectors();
-
-        // if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W))
-        //     camera.position += camera.Forward() * speed * deltaTime;
-        // if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S))
-        //     camera.position -= camera.Forward() * speed * deltaTime;
-        // if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A))
-        //     camera.position -= camera.Right() * speed * deltaTime;
-        // if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D))
-        //     camera.position += camera.Right() * speed * deltaTime; 
-
-        // if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Right)){
-        //     if (isFirstMouse){
-        //         lastMousePos = sf::Mouse::getPosition(window);
-        //         isFirstMouse = false;
-        //         window.setMouseCursorVisible(false);
-        //     } else {
-        //         sf::Vector2i mousePos = sf::Mouse::getPosition(window);
-        //         int xOffset = mousePos.x - lastMousePos.x;
-        //         int yOffset = lastMousePos.y - mousePos.y;
-
-        //         camera.yaw += xOffset * mouseSensitivity * deltaTime;
-        //         camera.pitch += yOffset * mouseSensitivity * deltaTime;
-
-        //         sf::Mouse::setPosition(lastMousePos, window);
-        //     }
-        // } else {
-        //     isFirstMouse = true;
-        //     window.setMouseCursorVisible(true);
-        // }
 
         // Rendering
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -97,7 +63,7 @@ int main(int argc, char** argv){
         shader.Use();
         shader.SetValue("view", camera.GetViewMatrix());
         shader.SetValue("projection", camera.GetProjectionMatrix((float)window.getSize().x, (float)window.getSize().y));
-        shader.SetValue("lightPos", camera.position);
+        // shader.SetValue("lights[0].position", camera.position);
         shader.SetValue("viewPos", camera.position);
 
         scene.Draw(shader);

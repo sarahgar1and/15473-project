@@ -64,3 +64,6 @@ void Shader::SetValue(const std::string& name, glm::mat4 value){
 void Shader::SetValue(const std::string& name, float value){
     glUniform1f(glGetUniformLocation(programID, name.c_str()), value);
 }
+void Shader::SetValue(const std::string& name, int value){
+    glUniform1i(glGetUniformLocation(programID, name.c_str()), value);
+}
