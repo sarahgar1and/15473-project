@@ -1,6 +1,8 @@
 #include "Scene.h"
 
 #include <iostream>
+#include <algorithm>
+#include <cfloat>
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
@@ -39,7 +41,9 @@ Scene::Scene(const std::string& fileName)
             lights.push_back(myLight);
         }
     }
-        
+    
+    // Apply heuristics to determine forward vs deferred rendering
+    UpdateRenderingMode();
 }
 
 void Scene::SetLights(Shader& shader) const {
@@ -52,10 +56,11 @@ void Scene::SetLights(Shader& shader) const {
     shader.SetValue("numLights", i);
 }
 
-void Scene::DrawForward(Shader& shader) const {
+int Scene::DrawForward(Shader& shader) const {
     shader.Use();
     SetLights(shader);
 
+    int count = 0;
     for (const auto& mesh : meshes){
         const Material& material = materials[mesh.materialIndex];
 
@@ -66,14 +71,18 @@ void Scene::DrawForward(Shader& shader) const {
         shader.SetValue("material.diffuse", material.diffuse);
         shader.SetValue("material.specular", material.specular);
         shader.SetValue("material.shininess", material.shininess);
+        shader.SetValue("material.opacity", material.opacity);
 
         mesh.Draw();
+        count++;
     }
+    return count;
 }
 
-void Scene::DrawDeferred(Shader& gbufferShader) const {
+int Scene::DrawDeferred(Shader& gbufferShader) const {
     gbufferShader.Use();
 
+    int count = 0;
     for (const auto& mesh : meshes) {
         const Material& material = materials[mesh.materialIndex];
 
@@ -86,7 +95,9 @@ void Scene::DrawDeferred(Shader& gbufferShader) const {
         gbufferShader.SetValue("material.shininess", material.shininess);
 
         mesh.Draw();
+        count++;
     }
+    return count;
 }
 
 
@@ -125,25 +136,61 @@ Material Scene::processMaterials(aiMaterial* mat){
     material.diffuse = glm::vec3(col.r, col.g, col.b);
 
     mat->Get(AI_MATKEY_COLOR_SPECULAR, col);
-    material.diffuse = glm::vec3(col.r, col.g, col.b);
+    material.specular = glm::vec3(col.r, col.g, col.b);
 
     mat->Get(AI_MATKEY_SHININESS, material.shininess);
-
-    // material.useForward = false;
+    
+    // Check for transparency/opacity
+    float opacity = 1.0f;
+    if (mat->Get(AI_MATKEY_OPACITY, opacity) == AI_SUCCESS) {
+        material.opacity = opacity;
+    }
 
     return material;
+}
+
+void Scene::UpdateRenderingMode() {
+    // Update useForward flag for each material based on heuristics
+    // This should be called after all meshes and materials are loaded
+    for (size_t i = 0; i < meshes.size(); i++) {
+        const Mesh& mesh = meshes[i];
+        const Material& material = materials[mesh.materialIndex];
+        
+        // Transform mesh center to world space
+        glm::vec3 worldCenter = glm::vec3(mesh.transformation * glm::vec4(mesh.center, 1.0f));
+        
+        // Use heuristic to determine rendering mode
+        materials[mesh.materialIndex].useForward = ShouldUseForward(
+            material, 
+            mesh.triangleCount,
+            worldCenter,
+            camera.position,
+            lights.size()
+        );
+    }
 }
 
 Mesh Scene::processMesh(aiMesh* mesh){
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
 
+    // Compute bounding box center for distance calculations
+    glm::vec3 minPos(FLT_MAX), maxPos(-FLT_MAX);
+    
     for (size_t i = 0; i < mesh->mNumVertices; i++){
         Vertex vertex{};
         aiVector3D pos = mesh->mVertices[i];
         aiVector3D norm = mesh->mNormals[i];
         vertex.position = glm::vec3(pos.x, pos.y, pos.z);
-        vertex.normal = glm::vec3(norm.x, norm.y, norm.z);;
+        vertex.normal = glm::vec3(norm.x, norm.y, norm.z);
+
+        // Update bounding box
+        minPos.x = std::min(minPos.x, vertex.position.x);
+        minPos.y = std::min(minPos.y, vertex.position.y);
+        minPos.z = std::min(minPos.z, vertex.position.z);
+        maxPos.x = std::max(maxPos.x, vertex.position.x);
+        maxPos.y = std::max(maxPos.y, vertex.position.y);
+        maxPos.z = std::max(maxPos.z, vertex.position.z);
 
         vertices.push_back(vertex);
     }
@@ -155,5 +202,48 @@ Mesh Scene::processMesh(aiMesh* mesh){
         }
     }
 
-    return Mesh(vertices, indices, mesh->mMaterialIndex);
+    Mesh result(vertices, indices, mesh->mMaterialIndex);
+    result.center = (minPos + maxPos) * 0.5f; // Bounding box center
+    return result;
+}
+
+// Heuristic function to determine forward vs deferred rendering
+bool Scene::ShouldUseForward(const Material& material, size_t triangleCount,
+                             const glm::vec3& meshCenter,
+                             const glm::vec3& cameraPos,
+                             size_t numLights) {
+    // 1. TRANSPARENCY: Must use forward for transparent objects
+    // This is the most important check - deferred can't handle transparency properly
+    if (material.opacity < 0.99f) {
+        return true;
+    }
+    
+    // 2. SMALL MESHES: Very small meshes are better in forward
+    // Writing to multiple render targets has overhead, so small meshes benefit from forward
+    const size_t SMALL_MESH_THRESHOLD = 50; // triangles
+    if (triangleCount < SMALL_MESH_THRESHOLD) {
+        return true;
+    }
+    
+    // 3. DISTANCE: Far objects might be better in forward
+    // Far objects are affected by fewer lights and have less detail
+    float distance = glm::length(meshCenter - cameraPos);
+    const float FAR_DISTANCE_THRESHOLD = 100.0f;
+    if (distance > FAR_DISTANCE_THRESHOLD) {
+        return true;
+    }
+    
+    // 4. FEW LIGHTS: If very few lights, forward might be simpler
+    // Deferred shines with many lights, forward is fine for few lights
+    const size_t FEW_LIGHTS_THRESHOLD = 2;
+    if (numLights <= FEW_LIGHTS_THRESHOLD && triangleCount < 500) {
+        return true;
+    }
+    
+    // 5. VERY HIGH SHININESS: Highly reflective materials might benefit from deferred
+    // (This is a case where deferred is better, so we return false)
+    // But if combined with other factors, might still use forward
+    
+    // Default to deferred for opaque, medium-to-large meshes with multiple lights
+    return false;
 }

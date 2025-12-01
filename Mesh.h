@@ -15,6 +15,8 @@ public:
 
     glm::mat4 transformation;
     size_t materialIndex;
+    size_t triangleCount; // Number of triangles (indices.size() / 3)
+    glm::vec3 center; // Bounding box center (for distance calculations)
 
 private:
     std::vector<Vertex> vertices;

@@ -24,6 +24,7 @@ uniform struct {
     vec3 diffuse;
     vec3 specular;
     float shininess;
+    float opacity;
 } material;
 
 void main(){ 
@@ -45,5 +46,5 @@ void main(){
         finalColor += Id * material.diffuse + Is * material.specular;
     }
 
-    FragColor = vec4(finalColor, 1.0); 
+    FragColor = vec4(finalColor, material.opacity); 
 }

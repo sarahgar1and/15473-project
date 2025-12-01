@@ -3,7 +3,8 @@
 #include <GL/glew.h>
 
 Mesh::Mesh(std::vector<Vertex> vertices, std::vector<uint32_t> indices, size_t materialIndex)
-    : vertices(vertices), indices(indices), vao(), vbo(), ebo(), transformation(), materialIndex(materialIndex)
+    : vertices(vertices), indices(indices), vao(), vbo(), ebo(), transformation(), 
+      materialIndex(materialIndex), triangleCount(indices.size() / 3), center(0.0f)
 {
     glGenBuffers(1, &vbo);
     glGenBuffers(1, &ebo);

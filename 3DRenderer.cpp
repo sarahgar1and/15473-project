@@ -53,16 +53,15 @@ int main(int argc, char** argv){
     forwardShader.SetValue("ambientStrength", 0.1f);
     forwardShader.SetValue("ambientColor", 1.0f);
 
-    // sf::Clock clock{};
+    sf::Clock clock{};
+    bool statsPrinted = false;
     while (window.isOpen()){
-        // float deltaTime = clock.restart().asSeconds();
-
         while (const std::optional event = window.pollEvent()){
             if (event->is<sf::Event::Closed>())
                 window.close();
         }
+        clock.restart(); // Start timing the frame
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        // Rendering
         //-----------------------------------
         // 1. Deferred G-buffer pass
         //-----------------------------------
@@ -73,7 +72,7 @@ int main(int argc, char** argv){
         gbufferShader.SetValue("view", camera.GetViewMatrix());
         gbufferShader.SetValue("projection", camera.GetProjectionMatrix((float)window.getSize().x, (float)window.getSize().y));
 
-        scene.DrawDeferred(gbufferShader);
+        int deferredCount = scene.DrawDeferred(gbufferShader);
 
         gbuffer.BindForReading();
 
@@ -102,9 +101,18 @@ int main(int argc, char** argv){
         forwardShader.SetValue("projection", camera.GetProjectionMatrix((float)window.getSize().x, (float)window.getSize().y));
         forwardShader.SetValue("viewPos", camera.position);
 
-        scene.DrawForward(forwardShader);
+        int forwardCount = scene.DrawForward(forwardShader);
 
         glDisable(GL_BLEND);
+
+        // Calculate render time and print statistics once
+        if (!statsPrinted) {
+            float renderTime = clock.getElapsedTime().asSeconds() * 1000.0f; // Convert to milliseconds
+            std::cout << "Render Stats - Deferred: " << deferredCount 
+                      << " objects, Forward: " << forwardCount 
+                      << " objects, Total time: " << renderTime << " ms" << std::endl;
+            statsPrinted = true;
+        }
 
         window.display();
     }

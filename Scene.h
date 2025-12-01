@@ -12,7 +12,7 @@ struct Material{
     glm::vec3 diffuse;
     glm::vec3 specular;
     float shininess;
-
+    float opacity = 1.0f; // 1.0 = opaque, < 1.0 = transparent
     bool useForward = false;
 };
 
@@ -24,9 +24,20 @@ struct Light{
 class Scene{
 public:
     Scene(const std::string& fileName);
-    void DrawForward(Shader& shader) const; 
-    void DrawDeferred(Shader& shader) const; 
+    int DrawForward(Shader& shader) const; // Returns number of objects rendered
+    int DrawDeferred(Shader& shader) const; // Returns number of objects rendered 
     void SetLights(Shader& shader) const;
+    
+    // Heuristic function to determine if object should use forward rendering
+    static bool ShouldUseForward(const Material& material, size_t triangleCount, 
+                                 const glm::vec3& meshCenter = glm::vec3(0.0f),
+                                 const glm::vec3& cameraPos = glm::vec3(0.0f),
+                                 size_t numLights = 0);
+    
+    // Update rendering mode for all meshes based on heuristics
+    // Call this after scene is loaded or when camera/lighting changes
+    void UpdateRenderingMode();
+    
     Camera camera;
 
 private:
