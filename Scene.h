@@ -12,6 +12,8 @@ struct Material{
     glm::vec3 diffuse;
     glm::vec3 specular;
     float shininess;
+
+    bool useForward = false;
 };
 
 struct Light{
@@ -22,7 +24,9 @@ struct Light{
 class Scene{
 public:
     Scene(const std::string& fileName);
-    void Draw(Shader& shader) const; 
+    void DrawForward(Shader& shader) const; 
+    void DrawDeferred(Shader& shader) const; 
+    void SetLights(Shader& shader) const;
     Camera camera;
 
 private:

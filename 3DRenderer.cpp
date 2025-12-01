@@ -9,6 +9,8 @@
 #include "Shader.h"
 #include "Camera.h"
 #include "Scene.h"
+#include "GBuffer.h"
+#include "Quad.h"
 
 std::string ReadTextFile(const std::string& fileName);
 
@@ -30,20 +32,26 @@ int main(int argc, char** argv){
 
     glEnable(GL_DEPTH_TEST);
 
-    std::string fileName = "scene.fbx";
+    std::string fileName = "untitled.fbx";
     if (argc > 1) fileName = argv[1]; 
 
-    Shader shader(ReadTextFile("vertex.glsl"), ReadTextFile("fragment.glsl"));
+    Quad quad;
+    GBuffer gbuffer(800, 800);
+    Shader gbufferShader(ReadTextFile("gbuffer_vert.glsl"), ReadTextFile("gbuffer_frag.glsl"));
+    Shader lightingShader(ReadTextFile("lighting_vert.glsl"), ReadTextFile("lighting_frag.glsl"));
+    Shader forwardShader(ReadTextFile("forward_vertex.glsl"), ReadTextFile("forward_fragment.glsl"));
+
     Scene scene(fileName);
 
     Camera camera = scene.camera;
     camera.UpdateDirectionVectors();
 
-    shader.Use();
-    shader.SetValue("ambientStrength", 0.1f);
-    // shader.SetValue("lights[0].color", glm::vec3(1.0f));
-    shader.SetValue("ambientColor", 1.0f);
-    // shader.SetValue("numLights", 1);
+    lightingShader.Use();
+    lightingShader.SetValue("ambientStrength", 0.1f);
+    lightingShader.SetValue("ambientColor", 1.0f);
+    forwardShader.Use();
+    forwardShader.SetValue("ambientStrength", 0.1f);
+    forwardShader.SetValue("ambientColor", 1.0f);
 
     // sf::Clock clock{};
     while (window.isOpen()){
@@ -52,21 +60,51 @@ int main(int argc, char** argv){
         while (const std::optional event = window.pollEvent()){
             if (event->is<sf::Event::Closed>())
                 window.close();
-            else if (event->is<sf::Event::Resized>()){
-                glViewport(0, 0, window.getSize().x, window.getSize().y);
-            }
         }
-
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         // Rendering
+        //-----------------------------------
+        // 1. Deferred G-buffer pass
+        //-----------------------------------
+        gbuffer.BindForWriting();
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        shader.Use();
-        shader.SetValue("view", camera.GetViewMatrix());
-        shader.SetValue("projection", camera.GetProjectionMatrix((float)window.getSize().x, (float)window.getSize().y));
-        // shader.SetValue("lights[0].position", camera.position);
-        shader.SetValue("viewPos", camera.position);
+        gbufferShader.Use();
+        gbufferShader.SetValue("view", camera.GetViewMatrix());
+        gbufferShader.SetValue("projection", camera.GetProjectionMatrix((float)window.getSize().x, (float)window.getSize().y));
 
-        scene.Draw(shader);
+        scene.DrawDeferred(gbufferShader);
+
+        gbuffer.BindForReading();
+
+        //-----------------------------------
+        // 2. Deferred Lighting Pass
+        //-----------------------------------
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, window.getSize().x, window.getSize().y);
+        lightingShader.Use();
+        lightingShader.SetValue("viewPos", camera.position);
+        scene.SetLights(lightingShader);
+        gbuffer.BindTextures(lightingShader.programID);
+        glDisable(GL_DEPTH_TEST);
+        quad.Draw();
+        glEnable(GL_DEPTH_TEST);
+
+
+        //-----------------------------------
+        // 3. Forward Pass (overlays)
+        //-----------------------------------
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        forwardShader.Use();
+        forwardShader.SetValue("view", camera.GetViewMatrix());
+        forwardShader.SetValue("projection", camera.GetProjectionMatrix((float)window.getSize().x, (float)window.getSize().y));
+        forwardShader.SetValue("viewPos", camera.position);
+
+        scene.DrawForward(forwardShader);
+
+        glDisable(GL_BLEND);
 
         window.display();
     }

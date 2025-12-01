@@ -33,7 +33,7 @@ Scene::Scene(const std::string& fileName)
             aiColor3D col = light->mColorDiffuse;
 
             myLight.position = glm::vec3(nodeTransformations[light->mName.data] * glm::vec4(pos.x, pos.y, pos.z, 1.0f));
-            // myLight.color = glm::vec3(col.r, col.g, col.b);
+            myLight.color = glm::vec3(col.r, col.g, col.b);
             myLight.color = glm::vec3(1.0f);
 
             lights.push_back(myLight);
@@ -42,8 +42,7 @@ Scene::Scene(const std::string& fileName)
         
 }
 
-void Scene::Draw(Shader& shader) const {
-    shader.Use();
+void Scene::SetLights(Shader& shader) const {
     int i = 0;
     for (const auto& light : lights){
         shader.SetValue("lights[" + std::to_string(i) + "].position", light.position);
@@ -51,9 +50,17 @@ void Scene::Draw(Shader& shader) const {
         i++;
     }
     shader.SetValue("numLights", i);
+}
+
+void Scene::DrawForward(Shader& shader) const {
+    shader.Use();
+    SetLights(shader);
 
     for (const auto& mesh : meshes){
         const Material& material = materials[mesh.materialIndex];
+
+        if (!material.useForward) 
+            continue; // SKIP deferred meshes
 
         shader.SetValue("model", mesh.transformation);
         shader.SetValue("material.diffuse", material.diffuse);
@@ -63,6 +70,25 @@ void Scene::Draw(Shader& shader) const {
         mesh.Draw();
     }
 }
+
+void Scene::DrawDeferred(Shader& gbufferShader) const {
+    gbufferShader.Use();
+
+    for (const auto& mesh : meshes) {
+        const Material& material = materials[mesh.materialIndex];
+
+        if (material.useForward)
+            continue; // SKIP forward-only meshes
+
+        gbufferShader.SetValue("model", mesh.transformation);
+        gbufferShader.SetValue("material.diffuse", material.diffuse);
+        gbufferShader.SetValue("material.specular", material.specular);
+        gbufferShader.SetValue("material.shininess", material.shininess);
+
+        mesh.Draw();
+    }
+}
+
 
 void Scene::processNode(aiNode* node, const aiScene* scene, glm::mat4 parentTransformation,
     std::unordered_map<std::string, glm::mat4>& nodeTransformations){
@@ -102,6 +128,8 @@ Material Scene::processMaterials(aiMaterial* mat){
     material.diffuse = glm::vec3(col.r, col.g, col.b);
 
     mat->Get(AI_MATKEY_SHININESS, material.shininess);
+
+    // material.useForward = false;
 
     return material;
 }

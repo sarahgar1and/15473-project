@@ -13,6 +13,7 @@ public:
     void SetValue(const std::string& name, float value);
     void SetValue(const std::string& name, int value);
 
-private:
     uint32_t programID;
+
+private:
 };
