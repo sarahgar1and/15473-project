@@ -8,6 +8,7 @@ public:
         GBUFFER_TEXTURE_POSITION,
         GBUFFER_TEXTURE_NORMAL,
         GBUFFER_TEXTURE_ALBEDO_SPEC, // diffuse (rgb) + shininess (a)
+        GBUFFER_TEXTURE_SPECULAR, // specular color (rgb)
         GBUFFER_TEXTURE_COUNT
     };
 
@@ -48,15 +49,27 @@ public:
         );
 
         // ===============================
-        // Albedo.rgb + Shininess.a + Specular encoded (RGBA8)
+        // Albedo.rgb + Shininess.a (RGBA16F for precision)
         // ===============================
         CreateTexture(
             textures[GBUFFER_TEXTURE_ALBEDO_SPEC],
-            GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE
+            GL_RGBA16F, GL_RGBA, GL_FLOAT
         );
         glFramebufferTexture2D(
             GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2,
             GL_TEXTURE_2D, textures[GBUFFER_TEXTURE_ALBEDO_SPEC], 0
+        );
+
+        // ===============================
+        // Specular color (RGB16F for precision)
+        // ===============================
+        CreateTexture(
+            textures[GBUFFER_TEXTURE_SPECULAR],
+            GL_RGB16F, GL_RGB, GL_FLOAT
+        );
+        glFramebufferTexture2D(
+            GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3,
+            GL_TEXTURE_2D, textures[GBUFFER_TEXTURE_SPECULAR], 0
         );
 
         // ===============================
@@ -80,12 +93,13 @@ public:
         );
 
         // Tell OpenGL which color attachments to draw to
-        GLenum attachments[3] = {
+        GLenum attachments[4] = {
             GL_COLOR_ATTACHMENT0, // gPosition
             GL_COLOR_ATTACHMENT1, // gNormal
-            GL_COLOR_ATTACHMENT2  // gAlbedoSpec
+            GL_COLOR_ATTACHMENT2, // gAlbedoSpec
+            GL_COLOR_ATTACHMENT3  // gSpecular
         };
-        glDrawBuffers(3, attachments);
+        glDrawBuffers(4, attachments);
 
         if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
             std::cerr << "GBuffer incomplete!\n";
@@ -117,6 +131,9 @@ public:
         glBindTexture(GL_TEXTURE_2D, textures[GBUFFER_TEXTURE_ALBEDO_SPEC]);
 
         glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, textures[GBUFFER_TEXTURE_SPECULAR]);
+
+        glActiveTexture(GL_TEXTURE4);
         glBindTexture(GL_TEXTURE_2D, depthTexture);
     }
 
@@ -134,6 +151,10 @@ public:
         glActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, textures[GBUFFER_TEXTURE_ALBEDO_SPEC]);
         glUniform1i(glGetUniformLocation(shaderID, "gAlbedoSpec"), 2);
+
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, textures[GBUFFER_TEXTURE_SPECULAR]);
+        glUniform1i(glGetUniformLocation(shaderID, "gSpecular"), 3);
     }
 
 

@@ -52,6 +52,14 @@ int main(int argc, char** argv){
     forwardShader.Use();
     forwardShader.SetValue("ambientStrength", 0.1f);
     forwardShader.SetValue("ambientColor", 1.0f);
+    gbufferShader.Use();
+    gbufferShader.SetValue("view", camera.GetViewMatrix());
+    gbufferShader.SetValue("projection", camera.GetProjectionMatrix((float)window.getSize().x, (float)window.getSize().y));
+    forwardShader.Use();
+    forwardShader.SetValue("view", camera.GetViewMatrix());
+    forwardShader.SetValue("projection", camera.GetProjectionMatrix((float)window.getSize().x, (float)window.getSize().y));
+    forwardShader.SetValue("viewPos", camera.position);
+
 
     sf::Clock clock{};
     bool statsPrinted = false;
@@ -69,8 +77,6 @@ int main(int argc, char** argv){
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         gbufferShader.Use();
-        gbufferShader.SetValue("view", camera.GetViewMatrix());
-        gbufferShader.SetValue("projection", camera.GetProjectionMatrix((float)window.getSize().x, (float)window.getSize().y));
 
         int deferredCount = scene.DrawDeferred(gbufferShader);
 
@@ -83,6 +89,8 @@ int main(int argc, char** argv){
         glViewport(0, 0, window.getSize().x, window.getSize().y);
         lightingShader.Use();
         lightingShader.SetValue("viewPos", camera.position);
+        lightingShader.SetValue("ambientStrength", 0.1f);
+        lightingShader.SetValue("ambientColor", 1.0f);
         scene.SetLights(lightingShader);
         gbuffer.BindTextures(lightingShader.programID);
         glDisable(GL_DEPTH_TEST);
@@ -97,9 +105,6 @@ int main(int argc, char** argv){
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
         forwardShader.Use();
-        forwardShader.SetValue("view", camera.GetViewMatrix());
-        forwardShader.SetValue("projection", camera.GetProjectionMatrix((float)window.getSize().x, (float)window.getSize().y));
-        forwardShader.SetValue("viewPos", camera.position);
 
         int forwardCount = scene.DrawForward(forwardShader);
 

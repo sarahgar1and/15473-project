@@ -42,13 +42,6 @@ Quad::Quad() : vao(), vbo(), ebo()
     glBindVertexArray(0);
 }
 
-// Quad::~Quad()
-// {
-//     glDeleteBuffers(1, &vbo);
-//     glDeleteBuffers(1, &ebo);
-//     glDeleteVertexArrays(1, &vao);
-// }
-
 void Quad::Draw() const
 {
     glBindVertexArray(vao);

@@ -32,9 +32,11 @@ void main(){
     vec3 Ia = ambientColor * ambientStrength;
     vec3 finalColor = Ia * material.diffuse;
 
+    // Normalize normal once (matches deferred shader)
+    vec3 N = normalize(Normal);
+
     for (int i = 0; i < min(numLights, MAX_LIGHTS); i++){    
         // diffuse
-        vec3 N = normalize(Normal);
         vec3 Lm = normalize(lights[i].position - FragPos);
         vec3 Id = lights[i].color * max(dot(N, Lm), 0.0);
 
