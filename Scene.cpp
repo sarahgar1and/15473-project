@@ -62,10 +62,10 @@ int Scene::DrawForward(Shader& shader) const {
 
     int count = 0;
     for (const auto& mesh : meshes){
-        const Material& material = materials[mesh.materialIndex];
-
-        if (!material.useForward) 
+        if (!mesh.useForward) 
             continue; // SKIP deferred meshes
+
+        const Material& material = materials[mesh.materialIndex];
 
         shader.SetValue("model", mesh.transformation);
         shader.SetValue("material.diffuse", material.diffuse);
@@ -84,10 +84,10 @@ int Scene::DrawDeferred(Shader& gbufferShader) const {
 
     int count = 0;
     for (const auto& mesh : meshes) {
-        const Material& material = materials[mesh.materialIndex];
-
-        if (material.useForward)
+        if (mesh.useForward)
             continue; // SKIP forward-only meshes
+
+        const Material& material = materials[mesh.materialIndex];
 
         gbufferShader.SetValue("model", mesh.transformation);
         gbufferShader.SetValue("material.diffuse", material.diffuse);
@@ -150,7 +150,7 @@ Material Scene::processMaterials(aiMaterial* mat){
 }
 
 void Scene::UpdateRenderingMode() {
-    // Update useForward flag for each material based on heuristics
+    // Update useForward flag for each mesh based on heuristics
     // This should be called after all meshes and materials are loaded
     for (size_t i = 0; i < meshes.size(); i++) {
         const Mesh& mesh = meshes[i];
@@ -160,7 +160,7 @@ void Scene::UpdateRenderingMode() {
         glm::vec3 worldCenter = glm::vec3(mesh.transformation * glm::vec4(mesh.center, 1.0f));
         
         // Use heuristic to determine rendering mode
-        materials[mesh.materialIndex].useForward = ShouldUseForward(
+        meshes[i].useForward = ShouldUseForward(
             material, 
             mesh.triangleCount,
             worldCenter,

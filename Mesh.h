@@ -17,6 +17,7 @@ public:
     size_t materialIndex;
     size_t triangleCount; // Number of triangles (indices.size() / 3)
     glm::vec3 center; // Bounding box center (for distance calculations)
+    bool useForward = false; // Whether to use forward rendering for this mesh
 
 private:
     std::vector<Vertex> vertices;

@@ -13,7 +13,6 @@ struct Material{
     glm::vec3 specular;
     float shininess;
     float opacity = 1.0f; // 1.0 = opaque, < 1.0 = transparent
-    bool useForward = false;
 };
 
 struct Light{
