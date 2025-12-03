@@ -18,6 +18,9 @@ struct Material{
 struct Light{
     glm::vec3 position;
     glm::vec3 color;
+    float constant = 1.0f;    // Constant attenuation
+    float linear = 0.014f;   // Linear attenuation (weaker for larger scenes)
+    float quadratic = 0.0007f; // Quadratic attenuation (weaker for larger scenes)
 };
 
 class Scene{

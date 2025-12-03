@@ -51,6 +51,9 @@ void Scene::SetLights(Shader& shader) const {
     for (const auto& light : lights){
         shader.SetValue("lights[" + std::to_string(i) + "].position", light.position);
         shader.SetValue("lights[" + std::to_string(i) + "].color", light.color);
+        shader.SetValue("lights[" + std::to_string(i) + "].constant", light.constant);
+        shader.SetValue("lights[" + std::to_string(i) + "].linear", light.linear);
+        shader.SetValue("lights[" + std::to_string(i) + "].quadratic", light.quadratic);
         i++;
     }
     shader.SetValue("numLights", i);
@@ -132,13 +135,26 @@ Material Scene::processMaterials(aiMaterial* mat){
     Material material{};
     aiColor3D col;
 
-    mat->Get(AI_MATKEY_COLOR_DIFFUSE, col);
-    material.diffuse = glm::vec3(col.r, col.g, col.b);
+    // Default values in case material properties are missing
+    material.diffuse = glm::vec3(0.8f, 0.8f, 0.8f); // Default gray
+    material.specular = glm::vec3(0.5f, 0.5f, 0.5f); // Default gray specular
+    material.shininess = 32.0f; // Default shininess
+    
+    if (mat->Get(AI_MATKEY_COLOR_DIFFUSE, col) == AI_SUCCESS) {
+        material.diffuse = glm::vec3(col.r, col.g, col.b);
+        // Ensure minimum brightness to prevent pure black
+        if (material.diffuse.x == 0.0f && material.diffuse.y == 0.0f && material.diffuse.z == 0.0f) {
+            material.diffuse = glm::vec3(0.2f, 0.2f, 0.2f); // Very dark gray instead of black
+        }
+    }
 
-    mat->Get(AI_MATKEY_COLOR_SPECULAR, col);
-    material.specular = glm::vec3(col.r, col.g, col.b);
+    if (mat->Get(AI_MATKEY_COLOR_SPECULAR, col) == AI_SUCCESS) {
+        material.specular = glm::vec3(col.r, col.g, col.b);
+    }
 
-    mat->Get(AI_MATKEY_SHININESS, material.shininess);
+    if (mat->Get(AI_MATKEY_SHININESS, material.shininess) != AI_SUCCESS) {
+        material.shininess = 32.0f; // Default if not found
+    }
     
     // Check for transparency/opacity
     float opacity = 1.0f;

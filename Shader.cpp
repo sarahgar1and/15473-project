@@ -54,16 +54,33 @@ void Shader::Use(){
 }
 
 void Shader::SetValue(const std::string& name, glm::vec3 value){
-    glUniform3f(glGetUniformLocation(programID, name.c_str()), value.x, value.y, value.z);
+    GLint location = glGetUniformLocation(programID, name.c_str());
+    if (location >= 0) {
+        glUniform3f(location, value.x, value.y, value.z);
+    } else {
+        // Uniform not found - this can happen for unused uniforms, which is OK
+        // Uncomment below to debug missing uniforms:
+        // std::cerr << "Warning: Uniform '" << name << "' not found in shader\n";
+    }
 }
 
 void Shader::SetValue(const std::string& name, glm::mat4 value){
-    glUniformMatrix4fv(glGetUniformLocation(programID, name.c_str()), 1, GL_FALSE, glm::value_ptr(value));
+    GLint location = glGetUniformLocation(programID, name.c_str());
+    if (location >= 0) {
+        glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(value));
+    }
 }
 
 void Shader::SetValue(const std::string& name, float value){
-    glUniform1f(glGetUniformLocation(programID, name.c_str()), value);
+    GLint location = glGetUniformLocation(programID, name.c_str());
+    if (location >= 0) {
+        glUniform1f(location, value);
+    }
 }
+
 void Shader::SetValue(const std::string& name, int value){
-    glUniform1i(glGetUniformLocation(programID, name.c_str()), value);
+    GLint location = glGetUniformLocation(programID, name.c_str());
+    if (location >= 0) {
+        glUniform1i(location, value);
+    }
 }

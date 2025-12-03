@@ -4,6 +4,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <glm/glm.hpp>
 
 #include "Mesh.h"
 #include "Shader.h"
@@ -47,11 +48,12 @@ int main(int argc, char** argv){
     camera.UpdateDirectionVectors();
 
     lightingShader.Use();
+    lightingShader.SetValue("viewPos", camera.position);
     lightingShader.SetValue("ambientStrength", 0.1f);
-    lightingShader.SetValue("ambientColor", 1.0f);
+    lightingShader.SetValue("ambientColor", glm::vec3(1.0f));
     forwardShader.Use();
     forwardShader.SetValue("ambientStrength", 0.1f);
-    forwardShader.SetValue("ambientColor", 1.0f);
+    forwardShader.SetValue("ambientColor", glm::vec3(1.0f));
     gbufferShader.Use();
     gbufferShader.SetValue("view", camera.GetViewMatrix());
     gbufferShader.SetValue("projection", camera.GetProjectionMatrix((float)window.getSize().x, (float)window.getSize().y));
@@ -88,9 +90,6 @@ int main(int argc, char** argv){
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, window.getSize().x, window.getSize().y);
         lightingShader.Use();
-        lightingShader.SetValue("viewPos", camera.position);
-        lightingShader.SetValue("ambientStrength", 0.1f);
-        lightingShader.SetValue("ambientColor", 1.0f);
         scene.SetLights(lightingShader);
         gbuffer.BindTextures(lightingShader.programID);
         glDisable(GL_DEPTH_TEST);
