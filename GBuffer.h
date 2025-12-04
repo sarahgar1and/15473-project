@@ -109,6 +109,22 @@ public:
     }
 
     // ======================
+    // Get memory usage in MB
+    // ======================
+    float GetMemoryUsageMB() const {
+        // Calculate bytes per pixel:
+        // Position (RGBA16F): 4 channels × 2 bytes = 8 bytes
+        // Normal (RGBA16F): 4 channels × 2 bytes = 8 bytes
+        // AlbedoSpec (RGBA16F): 4 channels × 2 bytes = 8 bytes
+        // Specular (RGB16F): 3 channels × 2 bytes = 6 bytes
+        // Depth (DEPTH_COMPONENT24): 4 bytes (stored as 32-bit internally)
+        // Total: 34 bytes per pixel
+        const float bytesPerPixel = 34.0f;
+        float totalBytes = width * height * bytesPerPixel;
+        return totalBytes / (1024.0f * 1024.0f); // Convert to MB
+    }
+
+    // ======================
     // Bind for geometry pass
     // ======================
     void BindForWriting() {

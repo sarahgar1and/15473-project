@@ -70,7 +70,6 @@ int main(int argc, char** argv){
             if (event->is<sf::Event::Closed>())
                 window.close();
         }
-        clock.restart(); // Start timing the frame
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         //-----------------------------------
         // 1. Deferred G-buffer pass
@@ -80,25 +79,32 @@ int main(int argc, char** argv){
 
         gbufferShader.Use();
 
+        clock.restart(); // Start timing the actual rendering work
         int deferredCount = scene.DrawDeferred(gbufferShader);
-
-        gbuffer.BindForReading();
 
         //-----------------------------------
         // 2. Deferred Lighting Pass
         //-----------------------------------
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glViewport(0, 0, window.getSize().x, window.getSize().y);
-        lightingShader.Use();
-        scene.SetLights(lightingShader);
-        gbuffer.BindTextures(lightingShader.programID);
-        glDisable(GL_DEPTH_TEST);
-        quad.Draw();
-        glEnable(GL_DEPTH_TEST);
+        if (deferredCount > 0) {
+            gbuffer.BindForReading();
+
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glViewport(0, 0, window.getSize().x, window.getSize().y);
+            lightingShader.Use();
+            scene.SetLights(lightingShader);
+            gbuffer.BindTextures(lightingShader.programID);
+            glDisable(GL_DEPTH_TEST);
+            quad.Draw();
+            glEnable(GL_DEPTH_TEST);
+        } else {
+            // Skip lighting pass if no deferred objects
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glViewport(0, 0, window.getSize().x, window.getSize().y);
+        }
 
 
         //-----------------------------------
-        // 3. Forward Pass (overlays)
+        // 3. Forward Pass 
         //-----------------------------------
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -112,9 +118,11 @@ int main(int argc, char** argv){
         // Calculate render time and print statistics once
         if (!statsPrinted) {
             float renderTime = clock.getElapsedTime().asSeconds() * 1000.0f; // Convert to milliseconds
+            float gbufferMemory = gbuffer.GetMemoryUsageMB();
             std::cout << "Render Stats - Deferred: " << deferredCount 
                       << " objects, Forward: " << forwardCount 
-                      << " objects, Total time: " << renderTime << " ms" << std::endl;
+                      << " objects, Total time: " << renderTime << " ms"
+                      << ", G-buffer memory: " << gbufferMemory << " MB" << std::endl;
             statsPrinted = true;
         }
 

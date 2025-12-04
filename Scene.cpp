@@ -138,14 +138,9 @@ Material Scene::processMaterials(aiMaterial* mat){
     // Default values in case material properties are missing
     material.diffuse = glm::vec3(0.8f, 0.8f, 0.8f); // Default gray
     material.specular = glm::vec3(0.5f, 0.5f, 0.5f); // Default gray specular
-    material.shininess = 32.0f; // Default shininess
     
     if (mat->Get(AI_MATKEY_COLOR_DIFFUSE, col) == AI_SUCCESS) {
         material.diffuse = glm::vec3(col.r, col.g, col.b);
-        // Ensure minimum brightness to prevent pure black
-        if (material.diffuse.x == 0.0f && material.diffuse.y == 0.0f && material.diffuse.z == 0.0f) {
-            material.diffuse = glm::vec3(0.2f, 0.2f, 0.2f); // Very dark gray instead of black
-        }
     }
 
     if (mat->Get(AI_MATKEY_COLOR_SPECULAR, col) == AI_SUCCESS) {
@@ -157,9 +152,8 @@ Material Scene::processMaterials(aiMaterial* mat){
     }
     
     // Check for transparency/opacity
-    float opacity = 1.0f;
-    if (mat->Get(AI_MATKEY_OPACITY, opacity) == AI_SUCCESS) {
-        material.opacity = opacity;
+    if (mat->Get(AI_MATKEY_OPACITY, material.opacity) != AI_SUCCESS) {
+        material.opacity = 1.0f; // Default if not found
     }
 
     return material;

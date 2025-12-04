@@ -58,9 +58,7 @@ void Shader::SetValue(const std::string& name, glm::vec3 value){
     if (location >= 0) {
         glUniform3f(location, value.x, value.y, value.z);
     } else {
-        // Uniform not found - this can happen for unused uniforms, which is OK
-        // Uncomment below to debug missing uniforms:
-        // std::cerr << "Warning: Uniform '" << name << "' not found in shader\n";
+        std::cerr << "Warning: Uniform '" << name << "' not found in shader\n";
     }
 }
 
