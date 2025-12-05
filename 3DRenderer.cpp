@@ -46,6 +46,16 @@ int main(int argc, char** argv){
 
     Camera camera = scene.camera;
     camera.UpdateDirectionVectors();
+    
+    // Set up view/projection for overdraw measurement
+    gbufferShader.Use();
+    gbufferShader.SetValue("view", camera.GetViewMatrix());
+    gbufferShader.SetValue("projection", camera.GetProjectionMatrix((float)window.getSize().x, (float)window.getSize().y));
+    
+    // Measure preprocessing time (overdraw detection and heuristic evaluation)
+    sf::Clock preprocessClock;
+    scene.UpdateRenderingMode(gbufferShader, window.getSize().x, window.getSize().y);
+    float preprocessTime = preprocessClock.getElapsedTime().asSeconds() * 1000.0f; // Convert to milliseconds
 
     lightingShader.Use();
     lightingShader.SetValue("viewPos", camera.position);
@@ -54,10 +64,6 @@ int main(int argc, char** argv){
     forwardShader.Use();
     forwardShader.SetValue("ambientStrength", 0.1f);
     forwardShader.SetValue("ambientColor", glm::vec3(1.0f));
-    gbufferShader.Use();
-    gbufferShader.SetValue("view", camera.GetViewMatrix());
-    gbufferShader.SetValue("projection", camera.GetProjectionMatrix((float)window.getSize().x, (float)window.getSize().y));
-    forwardShader.Use();
     forwardShader.SetValue("view", camera.GetViewMatrix());
     forwardShader.SetValue("projection", camera.GetProjectionMatrix((float)window.getSize().x, (float)window.getSize().y));
     forwardShader.SetValue("viewPos", camera.position);
@@ -121,7 +127,8 @@ int main(int argc, char** argv){
             float gbufferMemory = gbuffer.GetMemoryUsageMB();
             std::cout << "Render Stats - Deferred: " << deferredCount 
                       << " objects, Forward: " << forwardCount 
-                      << " objects, Total time: " << renderTime << " ms"
+                      << " objects, Render time: " << renderTime << " ms"
+                      << ", Preprocess time: " << preprocessTime << " ms"
                       << ", G-buffer memory: " << gbufferMemory << " MB" << std::endl;
             statsPrinted = true;
         }

@@ -30,15 +30,29 @@ public:
     int DrawDeferred(Shader& shader) const; // Returns number of objects rendered 
     void SetLights(Shader& shader) const;
     
+    // Global thresholds for rendering heuristics
+    static float HIGH_OVERDRAW_THRESHOLD;
+    static float LOW_OVERDRAW_THRESHOLD;
+    static size_t SMALL_MESH_THRESHOLD;
+    static float FAR_DISTANCE_THRESHOLD;
+    static size_t FEW_LIGHTS_THRESHOLD;
+    static size_t LARGE_MESH_THRESHOLD;
+
     // Heuristic function to determine if object should use forward rendering
     static bool ShouldUseForward(const Material& material, size_t triangleCount, 
                                  const glm::vec3& meshCenter = glm::vec3(0.0f),
                                  const glm::vec3& cameraPos = glm::vec3(0.0f),
-                                 size_t numLights = 0);
+                                 size_t numLights = 0,
+                                 float overdrawRatio = 1.0f);
+    
+    // Measure overdraw for a specific mesh (returns average overdraw ratio)
+    // overdrawRatio = totalFragments / visiblePixels (1.0 = no overdraw, 2.0 = 2x overdraw, etc.)
+    float MeasureOverdraw(const Mesh& mesh, Shader& shader, int viewportWidth, int viewportHeight,
+                          const glm::mat4& view, const glm::mat4& projection) const;
     
     // Update rendering mode for all meshes based on heuristics
     // Call this after scene is loaded or when camera/lighting changes
-    void UpdateRenderingMode();
+    void UpdateRenderingMode(Shader& gbufferShader, int viewportWidth, int viewportHeight);
     
     Camera camera;
 
