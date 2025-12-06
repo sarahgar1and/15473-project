@@ -170,19 +170,33 @@ Material Scene::processMaterials(aiMaterial* mat){
     return material;
 }
 
-void Scene::UpdateRenderingMode(Shader& gbufferShader, int viewportWidth, int viewportHeight) {
+void Scene::UpdateRenderingMode(Shader& gbufferShader, int viewportWidth, int viewportHeight, Mode mode) {
     glm::mat4 view = camera.GetViewMatrix();
     glm::mat4 projection = camera.GetProjectionMatrix((float)viewportWidth, (float)viewportHeight);
     
     for (size_t i = 0; i < meshes.size(); i++) {
-        const Mesh& mesh = meshes[i];
-        const Material& material = materials[mesh.materialIndex];
+        const Mesh& mesh = meshes[i];        
+
+        if (mode == DEFERRED){
+            meshes[i].useForward = false; 
+            continue;
+        } else if (mode == FORWARD){
+            meshes[i].useForward = true;
+            continue;
+        }
         
+        // Hybrid Otherwise
+        const Material& material = materials[mesh.materialIndex];
+
         // Transform mesh center to world space
         glm::vec3 worldCenter = glm::vec3(mesh.transformation * glm::vec4(mesh.center, 1.0f));
         
         // Don't waste computation on small meshes
-        float overdrawRatio = mesh.triangleCount <= SMALL_MESH_THRESHOLD ? 1.0f : MeasureOverdraw(mesh, gbufferShader, viewportWidth, viewportHeight, view, projection);
+        float overdrawRatio = MeasureOverdraw(mesh, gbufferShader, viewportWidth, viewportHeight, view, projection);
+        // if (mesh.triangleCount <= SMALL_MESH_THRESHOLD){
+        //     overdrawRatio = 1.0f;
+        //     std::cout << "Small Mesh: " << mesh.triangleCount << " triangles --> Low Overdraw" << std::endl;
+        // } else overdrawRatio = MeasureOverdraw(mesh, gbufferShader, viewportWidth, viewportHeight, view, projection);
         
         // Use heuristic to determine rendering mode
         meshes[i].useForward = ShouldUseForward(
@@ -311,6 +325,9 @@ float Scene::MeasureOverdraw(const Mesh& mesh, Shader& shader, int viewportWidth
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, viewportWidth, viewportHeight);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthStencilRB);
     
+    // Set viewport to match framebuffer size
+    glViewport(0, 0, viewportWidth, viewportHeight);
+    
     // Clear stencil to 0
     glClearStencil(0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
@@ -328,6 +345,8 @@ float Scene::MeasureOverdraw(const Mesh& mesh, Shader& shader, int viewportWidth
     
     // Render only this mesh
     shader.Use();
+    shader.SetValue("view", view);
+    shader.SetValue("projection", projection);
     const Material& material = materials[mesh.materialIndex];
     shader.SetValue("model", mesh.transformation);
     shader.SetValue("material.diffuse", material.diffuse);
@@ -374,12 +393,14 @@ bool Scene::ShouldUseForward(const Material& material, size_t triangleCount,
     // 1. TRANSPARENCY: Must use forward for transparent objects
     // This is the most important check - deferred can't handle transparency properly
     if (material.opacity < 0.99f) {
+        std::cout << "Transparent Object --> Forward" << std::endl;
         return true;
     }
     
     // 2. SMALL MESHES: Very small meshes are better in forward
     // Writing to multiple render targets has overhead, so small meshes benefit from forward
     if (triangleCount < SMALL_MESH_THRESHOLD) {
+        std::cout << "Small Mesh: " << triangleCount <<" triangles --> Forward" << std::endl;
         return true;
     }
     
@@ -387,12 +408,14 @@ bool Scene::ShouldUseForward(const Material& material, size_t triangleCount,
     // Far objects are affected by fewer lights and have less detail
     float distance = glm::length(meshCenter - cameraPos);
     if (distance > FAR_DISTANCE_THRESHOLD) {
+        std::cout << "Far Distance: " << distance <<" --> Forward" << std::endl;
         return true;
     }
     
     // 4. FEW LIGHTS: If very few lights, forward might be simpler
     // Deferred shines with many lights, forward is fine for few lights
     if (numLights <= FEW_LIGHTS_THRESHOLD && triangleCount < LARGE_MESH_THRESHOLD) {
+        std::cout << "Few Lights: " << numLights << "lights and Small Mesh: " << triangleCount <<" triangles --> Forward" << std::endl;
         return true;
     }
     
@@ -400,11 +423,13 @@ bool Scene::ShouldUseForward(const Material& material, size_t triangleCount,
     // Low overdraw with few lights favors forward (less overhead)
     if (overdrawRatio >= HIGH_OVERDRAW_THRESHOLD && numLights >= 3) {
         // High overdraw + many lights: deferred is better (lighting once per pixel)
+        std::cout << "High overdraw: " << overdrawRatio <<"x and Many Lights: " << numLights << " --> Deferred" << std::endl;
         return false;
     }
     
     if (overdrawRatio < LOW_OVERDRAW_THRESHOLD && numLights <= FEW_LIGHTS_THRESHOLD) {
         // Low overdraw + few lights: forward is better (less overhead)
+        std::cout << "Low overdraw: " << overdrawRatio <<"x and Few Lights: " << numLights << " --> Forward" << std::endl;
         return true;
     }
     

@@ -23,6 +23,12 @@ struct Light{
     float quadratic = 0.0007f; // Quadratic attenuation (weaker for larger scenes)
 };
 
+enum Mode{
+    DEFERRED,
+    FORWARD, 
+    HYBRID
+};
+
 class Scene{
 public:
     Scene(const std::string& fileName);
@@ -52,7 +58,7 @@ public:
     
     // Update rendering mode for all meshes based on heuristics
     // Call this after scene is loaded or when camera/lighting changes
-    void UpdateRenderingMode(Shader& gbufferShader, int viewportWidth, int viewportHeight);
+    void UpdateRenderingMode(Shader& gbufferShader, int viewportWidth, int viewportHeight, Mode mode);
     
     Camera camera;
 

@@ -28,6 +28,23 @@
         "sstream": "cpp",
         "iostream": "cpp",
         "unordered_map": "cpp",
-        "__node_handle": "cpp"
+        "__node_handle": "cpp",
+        "__bit_reference": "cpp",
+        "__hash_table": "cpp",
+        "__locale": "cpp",
+        "bitset": "cpp",
+        "ios": "cpp",
+        "istream": "cpp",
+        "locale": "cpp",
+        "mutex": "cpp",
+        "print": "cpp",
+        "streambuf": "cpp",
+        "vector": "cpp",
+        "array": "cpp",
+        "cctype": "cpp",
+        "cstdarg": "cpp",
+        "queue": "cpp",
+        "stack": "cpp",
+        "unordered_set": "cpp"
     }
 }

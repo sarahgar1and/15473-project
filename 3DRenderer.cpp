@@ -4,6 +4,10 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <string>
+#include <vector>
+#include <algorithm>
+#include <cmath>
 #include <glm/glm.hpp>
 
 #include "Mesh.h"
@@ -34,10 +38,17 @@ int main(int argc, char** argv){
     glEnable(GL_DEPTH_TEST);
 
     std::string fileName = "untitled.fbx";
+    Mode mode = HYBRID;
     if (argc > 1) fileName = argv[1]; 
+    if (argc > 2){
+        std::string modeArg(argv[2]);
+        if (modeArg == "d" || modeArg == "deferred") mode = DEFERRED;
+        else if (modeArg == "f" || modeArg == "forward") mode = FORWARD;
+        else if (modeArg == "h" || modeArg == "hybrid") mode = HYBRID;
+    }
 
     Quad quad;
-    GBuffer gbuffer(800, 800);
+    GBuffer gbuffer((int)window.getSize().x, (int)window.getSize().y);
     Shader gbufferShader(ReadTextFile("gbuffer_vert.glsl"), ReadTextFile("gbuffer_frag.glsl"));
     Shader lightingShader(ReadTextFile("lighting_vert.glsl"), ReadTextFile("lighting_frag.glsl"));
     Shader forwardShader(ReadTextFile("forward_vertex.glsl"), ReadTextFile("forward_fragment.glsl"));
@@ -54,23 +65,31 @@ int main(int argc, char** argv){
     
     // Measure preprocessing time (overdraw detection and heuristic evaluation)
     sf::Clock preprocessClock;
-    scene.UpdateRenderingMode(gbufferShader, window.getSize().x, window.getSize().y);
+    scene.UpdateRenderingMode(gbufferShader, window.getSize().x, window.getSize().y, mode);
     float preprocessTime = preprocessClock.getElapsedTime().asSeconds() * 1000.0f; // Convert to milliseconds
 
     lightingShader.Use();
     lightingShader.SetValue("viewPos", camera.position);
-    lightingShader.SetValue("ambientStrength", 0.1f);
+    lightingShader.SetValue("ambientStrength", 0.2f);
     lightingShader.SetValue("ambientColor", glm::vec3(1.0f));
     forwardShader.Use();
-    forwardShader.SetValue("ambientStrength", 0.1f);
+    forwardShader.SetValue("ambientStrength", 0.2f);
     forwardShader.SetValue("ambientColor", glm::vec3(1.0f));
     forwardShader.SetValue("view", camera.GetViewMatrix());
     forwardShader.SetValue("projection", camera.GetProjectionMatrix((float)window.getSize().x, (float)window.getSize().y));
     forwardShader.SetValue("viewPos", camera.position);
 
 
+    // Benchmarking configuration
+    const int WARMUP_FRAMES = 10;  // Skip first N frames for warm-up
+    const int SAMPLE_FRAMES = 100; // Collect M frames for statistics
+    std::vector<float> renderTimes;
+    renderTimes.reserve(SAMPLE_FRAMES);
+    
+    int frameCount = 0;
     sf::Clock clock{};
     bool statsPrinted = false;
+    
     while (window.isOpen()){
         while (const std::optional event = window.pollEvent()){
             if (event->is<sf::Event::Closed>())
@@ -85,7 +104,12 @@ int main(int argc, char** argv){
 
         gbufferShader.Use();
 
-        clock.restart(); // Start timing the actual rendering work
+        // Ensure previous frame is complete before timing
+        if (frameCount >= WARMUP_FRAMES) {
+            glFinish();
+            clock.restart(); // Start timing the actual rendering work
+        }
+        
         int deferredCount = scene.DrawDeferred(gbufferShader);
 
         //-----------------------------------
@@ -121,15 +145,55 @@ int main(int argc, char** argv){
 
         glDisable(GL_BLEND);
 
-        // Calculate render time and print statistics once
-        if (!statsPrinted) {
+        // Collect render time sample (after warm-up period)
+        if (frameCount >= WARMUP_FRAMES && frameCount < WARMUP_FRAMES + SAMPLE_FRAMES) {
+            glFinish(); // Ensure GPU work is complete
             float renderTime = clock.getElapsedTime().asSeconds() * 1000.0f; // Convert to milliseconds
-            float gbufferMemory = gbuffer.GetMemoryUsageMB();
-            std::cout << "Render Stats - Deferred: " << deferredCount 
-                      << " objects, Forward: " << forwardCount 
-                      << " objects, Render time: " << renderTime << " ms"
-                      << ", Preprocess time: " << preprocessTime << " ms"
-                      << ", G-buffer memory: " << gbufferMemory << " MB" << std::endl;
+            renderTimes.push_back(renderTime);
+        }
+        
+        frameCount++;
+
+        // Calculate and print statistics after collecting all samples
+        if (!statsPrinted && frameCount >= WARMUP_FRAMES + SAMPLE_FRAMES) {
+            // Calculate statistics
+            if (!renderTimes.empty()) {
+                std::sort(renderTimes.begin(), renderTimes.end());
+                
+                // Mean
+                float sum = 0.0f;
+                for (float time : renderTimes) {
+                    sum += time;
+                }
+                float mean = sum / renderTimes.size();
+                
+                // Median
+                float median = renderTimes.size() % 2 == 0
+                    ? (renderTimes[renderTimes.size() / 2 - 1] + renderTimes[renderTimes.size() / 2]) / 2.0f
+                    : renderTimes[renderTimes.size() / 2];
+                
+                // Min/Max
+                float minTime = renderTimes.front();
+                float maxTime = renderTimes.back();
+                
+                // Standard deviation
+                float variance = 0.0f;
+                for (float time : renderTimes) {
+                    float diff = time - mean;
+                    variance += diff * diff;
+                }
+                float stdDev = std::sqrt(variance / renderTimes.size());
+                
+                float gbufferMemory = gbuffer.GetMemoryUsageMB();
+                std::cout << "Render Stats - Deferred: " << deferredCount 
+                          << " objects, Forward: " << forwardCount 
+                          << " objects" << std::endl;
+                std::cout << "Render time: mean=" << mean << " ms (median=" << median 
+                          << ", stddev=" << stdDev << ", min=" << minTime 
+                          << ", max=" << maxTime << ")" << std::endl;
+                std::cout << "Preprocess time: " << preprocessTime << " ms"
+                          << ", G-buffer memory: " << gbufferMemory << " MB" << std::endl;
+            }
             statsPrinted = true;
         }
 
