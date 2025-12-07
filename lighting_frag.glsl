@@ -11,6 +11,7 @@ uniform sampler2D gSpecular;
 uniform vec3 viewPos;
 uniform float ambientStrength;
 uniform vec3 ambientColor;
+uniform float exposure;
 
 struct Light {
     vec3 position;
@@ -18,6 +19,7 @@ struct Light {
     float constant;
     float linear;
     float quadratic;
+    float radius;
 };
 uniform Light lights[128];
 uniform int numLights;
@@ -46,19 +48,20 @@ void main()
 
     for (int i = 0; i < min(numLights, 128); ++i)
     {
-        // Calculate distance and attenuation
+        // Calculate distance between light source and current fragment
         vec3 lightDir = lights[i].position - FragPos;
         float distance = length(lightDir);
+        
+        // Light volume culling: skip lights outside their effective radius
+        if (distance > lights[i].radius) {
+            continue; // Skip this light, it's too far away to contribute
+        }
         
         // Prevent division by zero and ensure minimum distance
         distance = max(distance, 0.001);
         
-        // Light culling: skip lights that are too far away to contribute meaningfully
-        // Calculate max possible attenuation at this distance
-        float maxAttenuation = 1.0 / (lights[i].constant + lights[i].linear * distance + lights[i].quadratic * (distance * distance));
-        if (maxAttenuation < 0.01) continue; // Light too dim to matter (1% threshold)
-        
-        float attenuation = maxAttenuation;
+        // Calculate attenuation
+        float attenuation = 1.0 / (lights[i].constant + lights[i].linear * distance + lights[i].quadratic * (distance * distance));
         
         vec3 L = normalize(lightDir);
         vec3 V = normalize(viewPos - FragPos);
@@ -78,5 +81,12 @@ void main()
 
     // Clamp to prevent negative values
     result = max(result, vec3(0.0));
+    
+    // Tone mapping: map HDR values to [0, 1] range using exposure
+    // Exposure-based tone mapping: lower exposure = darker, higher exposure = brighter
+    result = vec3(1.0) - exp(-result * exposure);
+    
+    // Final clamp to ensure values are in valid range
+    result = clamp(result, vec3(0.0), vec3(1.0));
     FragColor = vec4(result, 1.0);
 }

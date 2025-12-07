@@ -68,13 +68,30 @@ int main(int argc, char** argv){
     scene.UpdateRenderingMode(gbufferShader, window.getSize().x, window.getSize().y, mode);
     float preprocessTime = preprocessClock.getElapsedTime().asSeconds() * 1000.0f; // Convert to milliseconds
 
+    // Calculate exposure based on number of lights
+    size_t numLights = scene.GetLightCount();
+    float exposure;
+    if (numLights == 0) {
+        exposure = 1.0f; // No lights, use standard exposure
+    } else if (numLights <= 5) {
+        exposure = 1.0f; // Few lights: standard exposure
+    } else if (numLights <= 20) {
+        exposure = 0.5f; // Moderate lights: reduce exposure
+    } else if (numLights <= 50) {
+        exposure = 0.3f; // Many lights: lower exposure
+    } else {
+        exposure = 0.1f; // Very many lights: very low exposure
+    }
+    
     lightingShader.Use();
     lightingShader.SetValue("viewPos", camera.position);
     lightingShader.SetValue("ambientStrength", 0.1f);
     lightingShader.SetValue("ambientColor", glm::vec3(1.0f));
+    lightingShader.SetValue("exposure", exposure);
     forwardShader.Use();
     forwardShader.SetValue("ambientStrength", 0.1f);
     forwardShader.SetValue("ambientColor", glm::vec3(1.0f));
+    forwardShader.SetValue("exposure", exposure);
     forwardShader.SetValue("view", camera.GetViewMatrix());
     forwardShader.SetValue("projection", camera.GetProjectionMatrix((float)window.getSize().x, (float)window.getSize().y));
     forwardShader.SetValue("viewPos", camera.position);

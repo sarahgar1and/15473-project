@@ -13,9 +13,8 @@
 float Scene::HIGH_OVERDRAW_THRESHOLD = 2.0f;
 float Scene::LOW_OVERDRAW_THRESHOLD = 1.2f;
 size_t Scene::SMALL_MESH_THRESHOLD = 50;
-float Scene::FAR_DISTANCE_THRESHOLD = 100.0f;
 size_t Scene::FEW_LIGHTS_THRESHOLD = 8;
-size_t Scene::LARGE_MESH_THRESHOLD = 500;
+float Scene::LOW_SCREEN_COVERAGE_THRESHOLD = 0.1f; // 10% of screen
 
 
 Scene::Scene(const std::string& fileName) 
@@ -59,6 +58,20 @@ Scene::Scene(const std::string& fileName)
             myLight.constant = light->mAttenuationConstant > 0.0f ? light->mAttenuationConstant : 1.0f;
             myLight.linear = light->mAttenuationLinear >= 0.0f ? light->mAttenuationLinear : 0.014f;
             myLight.quadratic = light->mAttenuationQuadratic >= 0.0f ? light->mAttenuationQuadratic : 0.0007f;
+            
+            // Calculate light radius based on attenuation
+            // Radius is the distance at which light brightness drops to 5/256 (essentially invisible)
+            float lightMax = std::max({myLight.color.r, myLight.color.g, myLight.color.b});
+            if (myLight.quadratic > 0.0f && lightMax > 0.0f) {
+                float discriminant = myLight.linear * myLight.linear - 4.0f * myLight.quadratic * (myLight.constant - (256.0f / 5.0f) * lightMax);
+                if (discriminant >= 0.0f) {
+                    myLight.radius = (-myLight.linear + std::sqrt(discriminant)) / (2.0f * myLight.quadratic);
+                } else {
+                    myLight.radius = 1000.0f; // Fallback: very large radius if calculation fails
+                }
+            } else {
+                myLight.radius = 1000.0f; // Fallback: very large radius if quadratic is 0
+            }
 
             lights.push_back(myLight);
         }
@@ -76,6 +89,7 @@ void Scene::SetLights(Shader& shader) const {
         shader.SetValue("lights[" + std::to_string(i) + "].constant", light.constant);
         shader.SetValue("lights[" + std::to_string(i) + "].linear", light.linear);
         shader.SetValue("lights[" + std::to_string(i) + "].quadratic", light.quadratic);
+        shader.SetValue("lights[" + std::to_string(i) + "].radius", light.radius);
         i++;
     }
     shader.SetValue("numLights", i);
@@ -202,19 +216,15 @@ void Scene::UpdateRenderingMode(Shader& gbufferShader, int viewportWidth, int vi
         // Transform mesh center to world space
         glm::vec3 worldCenter = glm::vec3(mesh.transformation * glm::vec4(mesh.center, 1.0f));
         
-        // Don't waste computation on small meshes
-        float overdrawRatio = MeasureOverdraw(mesh, gbufferShader, viewportWidth, viewportHeight, view, projection);
-        // if (mesh.triangleCount <= SMALL_MESH_THRESHOLD){
-        //     overdrawRatio = 1.0f;
-        //     std::cout << "Small Mesh: " << mesh.triangleCount << " triangles --> Low Overdraw" << std::endl;
-        // } else overdrawRatio = MeasureOverdraw(mesh, gbufferShader, viewportWidth, viewportHeight, view, projection);
+        MeshMetrics metrics = GetMetrics(mesh, gbufferShader, viewportWidth, viewportHeight, view, projection);
         
         // Use heuristic to determine rendering mode
         meshes[i].useForward = ShouldUseForward(
             material, 
             mesh.triangleCount,
             lights.size(),
-            overdrawRatio
+            metrics.overdrawRatio,
+            metrics.screenCoverage
         );
     }
 }
@@ -258,8 +268,9 @@ Mesh Scene::processMesh(aiMesh* mesh){
     return result;
 }
 
-float Scene::MeasureOverdraw(const Mesh& mesh, Shader& shader, int viewportWidth, int viewportHeight,
-                              const glm::mat4& view, const glm::mat4& projection) const {
+Scene::MeshMetrics Scene::GetMetrics(const Mesh& mesh, Shader& shader, int viewportWidth, int viewportHeight,
+                                          const glm::mat4& view, const glm::mat4& projection) const {
+    MeshMetrics metrics;
     
     // Calculate bounding box in screen space
     glm::mat4 mvp = projection * view * mesh.transformation;
@@ -301,8 +312,12 @@ float Scene::MeasureOverdraw(const Mesh& mesh, Shader& shader, int viewportWidth
         }
     }
     
-    // If mesh is not visible, return default
-    if (!anyVisible) return 1.0f;
+    // If mesh is not visible, return defaults
+    if (!anyVisible) {
+        metrics.overdrawRatio = 1.0f;
+        metrics.screenCoverage = 0.0f;
+        return metrics;
+    }
     
     // Clamp to viewport bounds
     int bboxMinX = std::max(0, (int)std::floor(minX));
@@ -313,8 +328,17 @@ float Scene::MeasureOverdraw(const Mesh& mesh, Shader& shader, int viewportWidth
     int bboxWidth = bboxMaxX - bboxMinX + 1;
     int bboxHeight = bboxMaxY - bboxMinY + 1;
     
-    // If bounding box is invalid, return default
-    if (bboxWidth <= 0 || bboxHeight <= 0) return 1.0f;
+    // If bounding box is invalid, return defaults
+    if (bboxWidth <= 0 || bboxHeight <= 0) {
+        metrics.overdrawRatio = 1.0f;
+        metrics.screenCoverage = 0.0f;
+        return metrics;
+    }
+    
+    // Calculate screen coverage as fraction of total screen area
+    float screenArea = (float)(viewportWidth * viewportHeight);
+    float bboxArea = (float)(bboxWidth * bboxHeight);
+    metrics.screenCoverage = bboxArea / screenArea;
     
     // Create a temporary framebuffer with stencil buffer
     GLuint fbo, colorTex, depthStencilRB;
@@ -390,16 +414,22 @@ float Scene::MeasureOverdraw(const Mesh& mesh, Shader& shader, int viewportWidth
     glDeleteRenderbuffers(1, &depthStencilRB);
     
     // Return overdraw ratio (1.0 = no overdraw, 2.0 = 2x overdraw, etc.)
-    if (visiblePixels == 0) return 1.0f;
-    return (float)totalFragments / (float)visiblePixels;
+    if (visiblePixels == 0) {
+        metrics.overdrawRatio = 1.0f;
+    } else {
+        metrics.overdrawRatio = (float)totalFragments / (float)visiblePixels;
+    }
+    
+    return metrics;
 }
 
 bool Scene::ShouldUseForward(const Material& material, size_t triangleCount,
                              size_t numLights,
-                             float overdrawRatio) {
+                             float overdrawRatio,
+                             float screenCoverage) {
     // 1. TRANSPARENCY: Must use forward for transparent objects
     // This is the most important check - deferred can't handle transparency properly
-    if (material.opacity < 0.99f) {
+    if (material.opacity < 1.0f) {
         std::cout << "Transparent Object --> Forward" << std::endl;
         return true;
     }
@@ -411,10 +441,10 @@ bool Scene::ShouldUseForward(const Material& material, size_t triangleCount,
         return true;
     }
     
-    // 3. FEW LIGHTS: If very few lights, forward might be simpler
-    // Deferred shines with many lights, forward is fine for few lights
-    if (numLights <= FEW_LIGHTS_THRESHOLD && triangleCount < LARGE_MESH_THRESHOLD) {
-        std::cout << "Few Lights: " << numLights << "lights and Small Mesh: " << triangleCount <<" triangles --> Forward" << std::endl;
+    // 3. FEW LIGHTS + LOW SCREEN COVERAGE: If very few lights and mesh covers little screen space, forward is better
+    // Deferred shines with many lights or high screen coverage (G-buffer cost amortized)
+    if (numLights <= FEW_LIGHTS_THRESHOLD && screenCoverage < LOW_SCREEN_COVERAGE_THRESHOLD) {
+        std::cout << "Few Lights: " << numLights << " lights and Low Screen Coverage: " << (screenCoverage * 100.0f) << "% --> Forward" << std::endl;
         return true;
     }
     
@@ -432,6 +462,6 @@ bool Scene::ShouldUseForward(const Material& material, size_t triangleCount,
         return true;
     }
     
-    // Default to deferred for opaque, medium-to-large meshes with multiple lights
+    // Default to deferred for opaque, medium-to-large meshes with multiple lights or high screen coverage
     return false;
 }

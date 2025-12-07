@@ -10,6 +10,7 @@ out vec4 FragColor;
 uniform float ambientStrength;
 uniform vec3 ambientColor;
 uniform vec3 viewPos;
+uniform float exposure = 1.0; // Exposure control for tone mapping
 
 struct Light {
     vec3 position;
@@ -66,5 +67,12 @@ void main(){
 
     // Clamp to prevent negative values
     finalColor = max(finalColor, vec3(0.0));
-    FragColor = vec4(finalColor, material.opacity); 
+    
+    // Tone mapping: map HDR values to [0, 1] range using exposure
+    // Exposure-based tone mapping: lower exposure = darker, higher exposure = brighter
+    finalColor = vec3(1.0) - exp(-finalColor * exposure);
+    
+    // Final clamp to ensure values are in valid range
+    finalColor = clamp(finalColor, vec3(0.0), vec3(1.0));
+    FragColor = vec4(finalColor, material.opacity);
 }
