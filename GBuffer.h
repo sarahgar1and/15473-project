@@ -15,6 +15,7 @@ public:
     GLuint fbo = 0;
     GLuint textures[GBUFFER_TEXTURE_COUNT];
     GLuint depthTexture = 0;
+    GLuint depthStencilRB = 0;
     int width, height;
 
     GBuffer(int w, int h) : width(w), height(h)
@@ -73,8 +74,14 @@ public:
         );
 
         // ===============================
-        // Depth buffer (Renderbuffer)
+        // Depth + Stencil buffer (Renderbuffer)
         // ===============================
+        glGenRenderbuffers(1, &depthStencilRB);
+        glBindRenderbuffer(GL_RENDERBUFFER, depthStencilRB);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthStencilRB);
+        
+        // Also create depth texture for reading (if needed elsewhere)
         glGenTextures(1, &depthTexture);
         glBindTexture(GL_TEXTURE_2D, depthTexture);
         glTexImage2D(
@@ -86,11 +93,6 @@ public:
 
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-        glFramebufferTexture2D(
-            GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-            GL_TEXTURE_2D, depthTexture, 0
-        );
 
         // Tell OpenGL which color attachments to draw to
         GLenum attachments[4] = {
@@ -131,6 +133,9 @@ public:
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
         glViewport(0, 0, width, height);
     }
+    
+    // Get FBO handle for blitting operations
+    GLuint GetFBO() const { return fbo; }
 
     // ======================
     // Bind for lighting pass

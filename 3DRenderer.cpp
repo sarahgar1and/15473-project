@@ -70,10 +70,10 @@ int main(int argc, char** argv){
 
     lightingShader.Use();
     lightingShader.SetValue("viewPos", camera.position);
-    lightingShader.SetValue("ambientStrength", 0.2f);
+    lightingShader.SetValue("ambientStrength", 0.1f);
     lightingShader.SetValue("ambientColor", glm::vec3(1.0f));
     forwardShader.Use();
-    forwardShader.SetValue("ambientStrength", 0.2f);
+    forwardShader.SetValue("ambientStrength", 0.1f);
     forwardShader.SetValue("ambientColor", glm::vec3(1.0f));
     forwardShader.SetValue("view", camera.GetViewMatrix());
     forwardShader.SetValue("projection", camera.GetProjectionMatrix((float)window.getSize().x, (float)window.getSize().y));
@@ -120,11 +120,14 @@ int main(int argc, char** argv){
 
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
             glViewport(0, 0, window.getSize().x, window.getSize().y);
+            
+            glDisable(GL_DEPTH_TEST);
+            
             lightingShader.Use();
             scene.SetLights(lightingShader);
             gbuffer.BindTextures(lightingShader.programID);
-            glDisable(GL_DEPTH_TEST);
             quad.Draw();
+            
             glEnable(GL_DEPTH_TEST);
         } else {
             // Skip lighting pass if no deferred objects

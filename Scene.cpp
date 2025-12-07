@@ -14,7 +14,7 @@ float Scene::HIGH_OVERDRAW_THRESHOLD = 2.0f;
 float Scene::LOW_OVERDRAW_THRESHOLD = 1.2f;
 size_t Scene::SMALL_MESH_THRESHOLD = 50;
 float Scene::FAR_DISTANCE_THRESHOLD = 100.0f;
-size_t Scene::FEW_LIGHTS_THRESHOLD = 2;
+size_t Scene::FEW_LIGHTS_THRESHOLD = 8;
 size_t Scene::LARGE_MESH_THRESHOLD = 500;
 
 
@@ -46,8 +46,19 @@ Scene::Scene(const std::string& fileName)
             aiColor3D col = light->mColorDiffuse;
 
             myLight.position = glm::vec3(nodeTransformations[light->mName.data] * glm::vec4(pos.x, pos.y, pos.z, 1.0f));
-            myLight.color = glm::vec3(col.r, col.g, col.b);
-            myLight.color = glm::vec3(1.0f);
+            
+            glm::vec3 fbxColor = glm::vec3(col.r, col.g, col.b);
+            float maxComp = std::max({fbxColor.r, fbxColor.g, fbxColor.b});
+            if (maxComp > 1.0f) {
+                myLight.color = fbxColor / maxComp;  // Normalize to [0, 1] preserving ratios
+            } else {
+                myLight.color = fbxColor;  // Already in [0, 1] range
+            }
+            // myLight.color = glm::vec3(1.0f);
+
+            myLight.constant = light->mAttenuationConstant > 0.0f ? light->mAttenuationConstant : 1.0f;
+            myLight.linear = light->mAttenuationLinear >= 0.0f ? light->mAttenuationLinear : 0.014f;
+            myLight.quadratic = light->mAttenuationQuadratic >= 0.0f ? light->mAttenuationQuadratic : 0.0007f;
 
             lights.push_back(myLight);
         }
@@ -202,8 +213,6 @@ void Scene::UpdateRenderingMode(Shader& gbufferShader, int viewportWidth, int vi
         meshes[i].useForward = ShouldUseForward(
             material, 
             mesh.triangleCount,
-            worldCenter,
-            camera.position,
             lights.size(),
             overdrawRatio
         );
@@ -386,8 +395,6 @@ float Scene::MeasureOverdraw(const Mesh& mesh, Shader& shader, int viewportWidth
 }
 
 bool Scene::ShouldUseForward(const Material& material, size_t triangleCount,
-                             const glm::vec3& meshCenter,
-                             const glm::vec3& cameraPos,
                              size_t numLights,
                              float overdrawRatio) {
     // 1. TRANSPARENCY: Must use forward for transparent objects
@@ -404,22 +411,14 @@ bool Scene::ShouldUseForward(const Material& material, size_t triangleCount,
         return true;
     }
     
-    // 3. DISTANCE: Far objects might be better in forward
-    // Far objects are affected by fewer lights and have less detail
-    float distance = glm::length(meshCenter - cameraPos);
-    if (distance > FAR_DISTANCE_THRESHOLD) {
-        std::cout << "Far Distance: " << distance <<" --> Forward" << std::endl;
-        return true;
-    }
-    
-    // 4. FEW LIGHTS: If very few lights, forward might be simpler
+    // 3. FEW LIGHTS: If very few lights, forward might be simpler
     // Deferred shines with many lights, forward is fine for few lights
     if (numLights <= FEW_LIGHTS_THRESHOLD && triangleCount < LARGE_MESH_THRESHOLD) {
         std::cout << "Few Lights: " << numLights << "lights and Small Mesh: " << triangleCount <<" triangles --> Forward" << std::endl;
         return true;
     }
     
-    // 5. OVERDRAW: High overdraw favors deferred (lighting done once per pixel)
+    // 4. OVERDRAW: High overdraw favors deferred (lighting done once per pixel)
     // Low overdraw with few lights favors forward (less overhead)
     if (overdrawRatio >= HIGH_OVERDRAW_THRESHOLD && numLights >= 3) {
         // High overdraw + many lights: deferred is better (lighting once per pixel)

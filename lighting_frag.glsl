@@ -53,7 +53,12 @@ void main()
         // Prevent division by zero and ensure minimum distance
         distance = max(distance, 0.001);
         
-        float attenuation = 1.0 / (lights[i].constant + lights[i].linear * distance + lights[i].quadratic * (distance * distance));
+        // Light culling: skip lights that are too far away to contribute meaningfully
+        // Calculate max possible attenuation at this distance
+        float maxAttenuation = 1.0 / (lights[i].constant + lights[i].linear * distance + lights[i].quadratic * (distance * distance));
+        if (maxAttenuation < 0.01) continue; // Light too dim to matter (1% threshold)
+        
+        float attenuation = maxAttenuation;
         
         vec3 L = normalize(lightDir);
         vec3 V = normalize(viewPos - FragPos);

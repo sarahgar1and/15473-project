@@ -46,8 +46,6 @@ public:
 
     // Heuristic function to determine if object should use forward rendering
     static bool ShouldUseForward(const Material& material, size_t triangleCount, 
-                                 const glm::vec3& meshCenter = glm::vec3(0.0f),
-                                 const glm::vec3& cameraPos = glm::vec3(0.0f),
                                  size_t numLights = 0,
                                  float overdrawRatio = 1.0f);
     
