@@ -7,13 +7,13 @@
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
-#include <GL/glew.h>
 
 // Initialize static threshold members
 float Scene::HIGH_OVERDRAW_THRESHOLD = 2.0f;
 float Scene::LOW_OVERDRAW_THRESHOLD = 1.2f;
 size_t Scene::SMALL_MESH_THRESHOLD = 50;
 size_t Scene::FEW_LIGHTS_THRESHOLD = 8;
+float Scene::LOW_SCENE_COVERAGE_THRESHOLD = 0.3f; // 30% of screen
 
 
 Scene::Scene(const std::string& fileName) 
@@ -27,6 +27,8 @@ Scene::Scene(const std::string& fileName)
         std::cerr << "Failed to load " << fileName << std::endl;
         return;
     }
+
+    camera.UpdateDirectionVectors();
 
     std::unordered_map<std::string, glm::mat4> nodeTransformations;
     processNode(scene->mRootNode, scene, glm::mat4(1.0f), nodeTransformations);
@@ -198,6 +200,73 @@ void Scene::UpdateRenderingMode(Shader& gbufferShader, int viewportWidth, int vi
     glm::mat4 view = camera.GetViewMatrix();
     glm::mat4 projection = camera.GetProjectionMatrix((float)viewportWidth, (float)viewportHeight);
     
+    // For hybrid mode, first calculate total scene screen coverage using bounding boxes
+    float totalSceneCoverage = 0.0f;
+    if (mode == HYBRID) {
+        float screenArea = (float)(viewportWidth * viewportHeight);
+        glm::mat4 mvp = projection * view;
+        
+        for (const auto& mesh : meshes) {
+            // Calculate bounding box in screen space
+            glm::mat4 meshMVP = mvp * mesh.transformation;
+            
+            // Get all 8 corners of the bounding box
+            glm::vec3 corners[8] = {
+                glm::vec3(mesh.bboxMin.x, mesh.bboxMin.y, mesh.bboxMin.z),
+                glm::vec3(mesh.bboxMax.x, mesh.bboxMin.y, mesh.bboxMin.z),
+                glm::vec3(mesh.bboxMin.x, mesh.bboxMax.y, mesh.bboxMin.z),
+                glm::vec3(mesh.bboxMax.x, mesh.bboxMax.y, mesh.bboxMin.z),
+                glm::vec3(mesh.bboxMin.x, mesh.bboxMin.y, mesh.bboxMax.z),
+                glm::vec3(mesh.bboxMax.x, mesh.bboxMin.y, mesh.bboxMax.z),
+                glm::vec3(mesh.bboxMin.x, mesh.bboxMax.y, mesh.bboxMax.z),
+                glm::vec3(mesh.bboxMax.x, mesh.bboxMax.y, mesh.bboxMax.z)
+            };
+            
+            // Transform to screen space and find bounding rectangle
+            float minX = FLT_MAX, maxX = -FLT_MAX;
+            float minY = FLT_MAX, maxY = -FLT_MAX;
+            bool anyVisible = false;
+            
+            for (int i = 0; i < 8; i++) {
+                glm::vec4 clipPos = meshMVP * glm::vec4(corners[i], 1.0f);
+                
+                if (clipPos.w > 0.0f) {
+                    float x = clipPos.x / clipPos.w;
+                    float y = clipPos.y / clipPos.w;
+                    
+                    x = (x + 1.0f) * 0.5f * viewportWidth;
+                    y = (1.0f - y) * 0.5f * viewportHeight;
+                    
+                    minX = std::min(minX, x);
+                    maxX = std::max(maxX, x);
+                    minY = std::min(minY, y);
+                    maxY = std::max(maxY, y);
+                    anyVisible = true;
+                }
+            }
+            
+            if (anyVisible) {
+                // Clamp to viewport bounds
+                int bboxMinX = std::max(0, (int)std::floor(minX));
+                int bboxMaxX = std::min(viewportWidth - 1, (int)std::ceil(maxX));
+                int bboxMinY = std::max(0, (int)std::floor(minY));
+                int bboxMaxY = std::min(viewportHeight - 1, (int)std::ceil(maxY));
+                
+                int bboxWidth = bboxMaxX - bboxMinX + 1;
+                int bboxHeight = bboxMaxY - bboxMinY + 1;
+                
+                if (bboxWidth > 0 && bboxHeight > 0) {
+                    float meshCoverage = (float)(bboxWidth * bboxHeight) / screenArea;
+                    totalSceneCoverage += meshCoverage;
+                }
+            }
+        }
+        
+        // Clamp total coverage to [0, 1] (can exceed 1.0 due to overlapping meshes)
+        // Kind of also detects overdraw between meshes
+        totalSceneCoverage = std::min(totalSceneCoverage, 1.0f);
+    }
+    
     for (size_t i = 0; i < meshes.size(); i++) {
         const Mesh& mesh = meshes[i];        
 
@@ -211,18 +280,13 @@ void Scene::UpdateRenderingMode(Shader& gbufferShader, int viewportWidth, int vi
         
         // Hybrid Otherwise
         const Material& material = materials[mesh.materialIndex];
-
-        // Transform mesh center to world space
-        glm::vec3 worldCenter = glm::vec3(mesh.transformation * glm::vec4(mesh.center, 1.0f));
-        
-        float overdrawRatio = MeasureOverdraw(mesh, gbufferShader, viewportWidth, viewportHeight, view, projection);
         
         // Use heuristic to determine rendering mode
         meshes[i].useForward = ShouldUseForward(
             material, 
             mesh.triangleCount,
             lights.size(),
-            overdrawRatio
+            totalSceneCoverage
         );
     }
 }
@@ -261,18 +325,18 @@ Mesh Scene::processMesh(aiMesh* mesh){
 
     Mesh result(vertices, indices, mesh->mMaterialIndex);
     result.center = (minPos + maxPos) * 0.5f; // Bounding box center
-    result.bboxMin = minPos; // Store bounding box min
-    result.bboxMax = maxPos; // Store bounding box max
+    result.bboxMin = minPos;
+    result.bboxMax = maxPos; 
     return result;
 }
 
 float Scene::MeasureOverdraw(const Mesh& mesh, Shader& shader, int viewportWidth, int viewportHeight,
-                              const glm::mat4& view, const glm::mat4& projection) const {
+                              const glm::mat4& view, const glm::mat4& projection,
+                              GLuint sharedFBO, GLuint sharedColorTex, GLuint sharedDepthStencilRB) const {
 
     // Calculate bounding box in screen space
     glm::mat4 mvp = projection * view * mesh.transformation;
 
-    // Get all 8 corners of the bounding box
     glm::vec3 corners[8] = {
         glm::vec3(mesh.bboxMin.x, mesh.bboxMin.y, mesh.bboxMin.z),
         glm::vec3(mesh.bboxMax.x, mesh.bboxMin.y, mesh.bboxMin.z),
@@ -324,23 +388,33 @@ float Scene::MeasureOverdraw(const Mesh& mesh, Shader& shader, int viewportWidth
     // If bounding box is invalid, return default
     if (bboxWidth <= 0 || bboxHeight <= 0) return 1.0f;
 
-    // Create a temporary framebuffer with stencil buffer
+    // Use shared FBO if provided, otherwise create a temporary one
     GLuint fbo, colorTex, depthStencilRB;
-    glGenFramebuffers(1, &fbo);
-    glGenTextures(1, &colorTex);
-    glGenRenderbuffers(1, &depthStencilRB);
-
+    bool useShared = (sharedFBO != 0);
+    
+    if (useShared) {
+        fbo = sharedFBO;
+        colorTex = sharedColorTex;
+        depthStencilRB = sharedDepthStencilRB;
+    } else {
+        glGenFramebuffers(1, &fbo);
+        glGenTextures(1, &colorTex);
+        glGenRenderbuffers(1, &depthStencilRB);
+        
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        
+        // Color attachment (needed for rendering)
+        glBindTexture(GL_TEXTURE_2D, colorTex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, viewportWidth, viewportHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTex, 0);
+        
+        // Depth + Stencil renderbuffer
+        glBindRenderbuffer(GL_RENDERBUFFER, depthStencilRB);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, viewportWidth, viewportHeight);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthStencilRB);
+    }
+    
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-
-    // Color attachment (needed for rendering)
-    glBindTexture(GL_TEXTURE_2D, colorTex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, viewportWidth, viewportHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTex, 0);
-
-    // Depth + Stencil renderbuffer
-    glBindRenderbuffer(GL_RENDERBUFFER, depthStencilRB);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, viewportWidth, viewportHeight);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthStencilRB);
 
     // Set viewport to match framebuffer size
     glViewport(0, 0, viewportWidth, viewportHeight);
@@ -353,6 +427,11 @@ float Scene::MeasureOverdraw(const Mesh& mesh, Shader& shader, int viewportWidth
     GLboolean colorMask[4];
     glGetBooleanv(GL_COLOR_WRITEMASK, colorMask); // Save current state
     glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE); // Disable all color writes
+
+    // Ensure depth testing is enabled (needed for stencil to work)
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE); // Enable depth writes
 
     // Enable stencil testing to increment on depth pass
     glEnable(GL_STENCIL_TEST);
@@ -371,12 +450,22 @@ float Scene::MeasureOverdraw(const Mesh& mesh, Shader& shader, int viewportWidth
     shader.SetValue("material.shininess", material.shininess);
     mesh.Draw();
 
+    // Flush to ensure rendering is complete before reading
+    glFinish();
+
     // Re-enable color writes
     glColorMask(colorMask[0], colorMask[1], colorMask[2], colorMask[3]);
 
     // Read back stencil buffer only for the bounding box region
+    // Note: Some OpenGL implementations require reading depth-stencil together
+    std::vector<GLuint> depthStencilData(bboxWidth * bboxHeight);
+    glReadPixels(bboxMinX, bboxMinY, bboxWidth, bboxHeight, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, depthStencilData.data());
+    
+    // Extract stencil values (stencil is in the lower 8 bits)
     std::vector<GLubyte> stencilData(bboxWidth * bboxHeight);
-    glReadPixels(bboxMinX, bboxMinY, bboxWidth, bboxHeight, GL_STENCIL_INDEX, GL_UNSIGNED_BYTE, stencilData.data());
+    for (int i = 0; i < bboxWidth * bboxHeight; i++) {
+        stencilData[i] = (GLubyte)(depthStencilData[i] & 0xFF);
+    }
 
     // Calculate statistics
     unsigned long long totalFragments = 0;
@@ -393,18 +482,24 @@ float Scene::MeasureOverdraw(const Mesh& mesh, Shader& shader, int viewportWidth
     // Cleanup
     glDisable(GL_STENCIL_TEST);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glDeleteFramebuffers(1, &fbo);
-    glDeleteTextures(1, &colorTex);
-    glDeleteRenderbuffers(1, &depthStencilRB);
+    
+    // Only delete if we created it (not using shared FBO)
+    if (!useShared) {
+        glDeleteFramebuffers(1, &fbo);
+        glDeleteTextures(1, &colorTex);
+        glDeleteRenderbuffers(1, &depthStencilRB);
+    }
 
     // Return overdraw ratio (1.0 = no overdraw, 2.0 = 2x overdraw, etc.)
-    if (visiblePixels == 0) return 1.0f;
+    if (visiblePixels == 0) {
+        std::cout << "No visible Pixels" << std::endl;
+        return 1.0f;
+    }
     return (float)totalFragments / (float)visiblePixels;
 }
 
 bool Scene::ShouldUseForward(const Material& material, size_t triangleCount,
-                             size_t numLights,
-                             float overdrawRatio) {
+                             size_t numLights, float totalSceneCoverage) {
     // 1. TRANSPARENCY: Must use forward for transparent objects
     // This is the most important check - deferred can't handle transparency properly
     if (material.opacity < 1.0f) {
@@ -412,31 +507,31 @@ bool Scene::ShouldUseForward(const Material& material, size_t triangleCount,
         return true;
     }
     
-    // 2. SMALL MESHES: Very small meshes are better in forward
+    // 2. LOW SCENE COVERAGE: If the scene as a whole has low screen coverage, use forward
+    // Deferred rendering overhead (G-buffer writes) is not worth it for sparse scenes
+    if (totalSceneCoverage < LOW_SCENE_COVERAGE_THRESHOLD) {
+        std::cout << "Low Scene Coverage: " << (totalSceneCoverage * 100.0f) << "% --> Forward" << std::endl;
+        return true;
+    }
+    
+    // 3. SMALL MESHES: Very small meshes are better in forward
     // Writing to multiple render targets has overhead, so small meshes benefit from forward
     if (triangleCount < SMALL_MESH_THRESHOLD) {
         std::cout << "Small Mesh: " << triangleCount <<" triangles --> Forward" << std::endl;
         return true;
     }
     
-    // 3. FEW LIGHTS + LOW SCREEN COVERAGE: If very few lights and mesh covers little screen space, forward is better
-    // Deferred shines with many lights or high screen coverage (G-buffer cost amortized)
-    // if (numLights <= FEW_LIGHTS_THRESHOLD && triangleCount < SMALL_MESH_THRESHOLD) {
-    //     std::cout << "Few Lights: " << numLights << " lights and Low Triangle Count: " << triangleCount << " triangles --> Forward" << std::endl;
-    //     return true;
-    // }
-    
-    // 4. OVERDRAW: High overdraw favors deferred (lighting done once per pixel)
-    // Low overdraw with few lights favors forward (less overhead)
-    if (overdrawRatio >= HIGH_OVERDRAW_THRESHOLD && numLights >= 3) {
-        // High overdraw + many lights: deferred is better (lighting once per pixel)
-        std::cout << "High overdraw: " << overdrawRatio <<"x and Many Lights: " << numLights << " --> Deferred" << std::endl;
+    // 4. NUMBER OF LIGHTS: Many lights favor deferred (lighting done once per pixel)
+    // Few lights favor forward (less overhead from G-buffer writes)
+    if (numLights > FEW_LIGHTS_THRESHOLD) {
+        // Many lights: deferred is better (lighting once per pixel in lighting pass)
+        std::cout << "Many Lights: " << numLights << " --> Deferred" << std::endl;
         return false;
     }
     
-    if (overdrawRatio < LOW_OVERDRAW_THRESHOLD && numLights <= FEW_LIGHTS_THRESHOLD) {
-        // Low overdraw + few lights: forward is better (less overhead)
-        std::cout << "Low overdraw: " << overdrawRatio <<"x and Few Lights: " << numLights << " --> Forward" << std::endl;
+    if (numLights <= FEW_LIGHTS_THRESHOLD) {
+        // Few lights: forward is better (less overhead)
+        std::cout << "Few Lights: " << numLights << " --> Forward" << std::endl;
         return true;
     }
     

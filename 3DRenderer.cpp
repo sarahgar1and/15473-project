@@ -56,7 +56,6 @@ int main(int argc, char** argv){
     Scene scene(fileName);
 
     Camera camera = scene.camera;
-    camera.UpdateDirectionVectors();
     
     // Set up view/projection for overdraw measurement
     gbufferShader.Use();

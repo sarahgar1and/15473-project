@@ -7,6 +7,7 @@
 #include <string>
 #include <unordered_map>
 #include <assimp/scene.h>
+#include <GL/glew.h>
 
 struct Material{
     glm::vec3 diffuse;
@@ -45,16 +46,19 @@ public:
     static float FAR_DISTANCE_THRESHOLD;
     static size_t FEW_LIGHTS_THRESHOLD;
     static size_t LARGE_MESH_THRESHOLD;
+    static float LOW_SCENE_COVERAGE_THRESHOLD; // Total scene screen coverage threshold
 
     // Heuristic function to determine if object should use forward rendering
     static bool ShouldUseForward(const Material& material, size_t triangleCount, 
                                  size_t numLights = 0,
-                                 float overdrawRatio = 1.0f);
+                                 float totalSceneCoverage = 0.0f);
 
     
     // Measure overdraw and screen coverage for a specific mesh (returns both metrics)
+    // If sharedFBO is provided (non-zero), it will be reused instead of creating a temporary FBO
     float MeasureOverdraw(const Mesh& mesh, Shader& shader, int viewportWidth, int viewportHeight,
-                                 const glm::mat4& view, const glm::mat4& projection) const;
+                                 const glm::mat4& view, const glm::mat4& projection,
+                                 GLuint sharedFBO = 0, GLuint sharedColorTex = 0, GLuint sharedDepthStencilRB = 0) const;
     
     // Update rendering mode for all meshes based on heuristics
     // Call this after scene is loaded or when camera/lighting changes
