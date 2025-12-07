@@ -45,22 +45,15 @@ public:
     static float FAR_DISTANCE_THRESHOLD;
     static size_t FEW_LIGHTS_THRESHOLD;
     static size_t LARGE_MESH_THRESHOLD;
-    static float LOW_SCREEN_COVERAGE_THRESHOLD; // Screen coverage threshold (0.0-1.0)
 
     // Heuristic function to determine if object should use forward rendering
     static bool ShouldUseForward(const Material& material, size_t triangleCount, 
                                  size_t numLights = 0,
-                                 float overdrawRatio = 1.0f,
-                                 float screenCoverage = 0.0f);
-    
-    // Structure to hold mesh metrics
-    struct MeshMetrics {
-        float overdrawRatio;    // totalFragments / visiblePixels (1.0 = no overdraw, 2.0 = 2x overdraw, etc.)
-        float screenCoverage;   // Fraction of screen covered (0.0-1.0)
-    };
+                                 float overdrawRatio = 1.0f);
+
     
     // Measure overdraw and screen coverage for a specific mesh (returns both metrics)
-    MeshMetrics GetMetrics(const Mesh& mesh, Shader& shader, int viewportWidth, int viewportHeight,
+    float MeasureOverdraw(const Mesh& mesh, Shader& shader, int viewportWidth, int viewportHeight,
                                  const glm::mat4& view, const glm::mat4& projection) const;
     
     // Update rendering mode for all meshes based on heuristics
