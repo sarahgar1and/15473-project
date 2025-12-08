@@ -51,14 +51,19 @@ public:
     // Heuristic function to determine if object should use forward rendering
     static bool ShouldUseForward(const Material& material, size_t triangleCount, 
                                  size_t numLights = 0,
-                                 float totalSceneCoverage = 0.0f);
+                                 float totalSceneCoverage = 0.0f,
+                                float totalOverdraw = 0.0f);
 
     
-    // Measure overdraw and screen coverage for a specific mesh (returns both metrics)
-    // If sharedFBO is provided (non-zero), it will be reused instead of creating a temporary FBO
-    float MeasureOverdraw(const Mesh& mesh, Shader& shader, int viewportWidth, int viewportHeight,
-                                 const glm::mat4& view, const glm::mat4& projection,
-                                 GLuint sharedFBO = 0, GLuint sharedColorTex = 0, GLuint sharedDepthStencilRB = 0) const;
+    // Structure to hold scene metrics
+    struct SceneMetrics {
+        float overdrawRatio;    // Average overdraw (1.0 = no overdraw, 2.0 = 2x overdraw, etc.)
+        float screenCoverage;   // Fraction of screen covered by visible geometry (0.0 to 1.0)
+    };
+    
+    // Measure overdraw and screen coverage for the entire scene using stencil buffer
+    SceneMetrics MeasureOverdraw(Shader& shader, int viewportWidth, int viewportHeight,
+                                 const glm::mat4& view, const glm::mat4& projection) const;
     
     // Update rendering mode for all meshes based on heuristics
     // Call this after scene is loaded or when camera/lighting changes
